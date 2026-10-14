@@ -1,0 +1,109 @@
+JANSEVAK
+Community-Driven Civic Engagement Platform
+
+Report. Validate. Act. Get Rewarded.
+
+==================================================
+PROJECT INFORMATION
+==================================================
+
+Hackathon: SFIC 2026
+Theme: Swachh & Sustainable Bharat
+Status: MVP In Progress
+Platform: iOS and Android
+
+==================================================
+1. ABOUT JANSEVAK
+==================================================
+
+JanSevak is a civic participation ecosystem that connects citizens, government authorities, and NGOs to report, resolve, and track local sanitation and sustainability issues.
+
+It is not just another complaint app. It closes the full loop:
+
+Report -> Validate -> Guide -> Act -> Hold Accountable -> Reward -> Learn
+
+==================================================
+2. THE PROBLEM
+==================================================
+
+Today's civic complaint systems face several challenges:
+
+1. Reports disappear without feedback, causing citizens to lose trust.
+2. Authorities struggle to distinguish urgent issues from less critical reports, resulting in slow and inefficient responses.
+3. Citizens often do not know which problems they can solve themselves.
+4. NGOs frequently work in isolation, leading to wasted resources.
+5. A lack of incentives and accountability can cause issues to remain unresolved for extended periods, sometimes more than 30 days.
+
+==================================================
+3. KEY FEATURES
+==================================================
+
+3.1. Hyper-Local Geo-Layered Feed
+
+- Displays civic issues within a default 500-meter radius.
+- Allows users to zoom out to ward, city, district, and state levels.
+- Supports filtering by category, status, severity, and action type.
+
+3.2. Community Validation
+
+- Allows users to confirm that they have seen an issue.
+- Enables citizens to indicate how an issue affects them.
+- Lets community members volunteer to help.
+- Supports in-person verification.
+- Includes severity polls and credibility-weighted voting.
+- Calculates an Urgency Score to help trigger escalation.
+
+3.3. AI-Powered Reporting
+
+- Analyzes photos to identify waste types, hazards, and severity.
+- Supports voice-to-text reporting.
+- Generates report titles and descriptions automatically.
+- Aims to make reporting possible in approximately two minutes.
+
+3.4. Intelligent Chatbot
+
+- Provides a 24/7 multilingual assistant.
+- Supports Hindi, English, and regional languages.
+- Diagnoses problems through natural conversation.
+- Escalates critical cases and provides step-by-step guidance.
+
+3.5. Dual-Action Framework
+
+TYPE A - COMMUNITY-SOLVABLE
+Citizens can address the issue themselves with appropriate guidance.
+
+TYPE B - COMMUNITY-SUPPORTED
+Citizens and government authorities work in parallel.
+
+TYPE C - GOVERNMENT-PRIMARY
+Government authorities lead the response while citizens report and monitor progress.
+
+TYPE D - EMERGENCY
+Emergency response takes priority. Citizens receive guidance to stay safe, evacuate when necessary, and report the incident when safe to do so.
+
+3.6. Machine Learning Impact Prediction
+
+- Forecasts the probability of success for proposed actions.
+- Compares community-led, government-led, and hybrid approaches.
+- Learns from actual outcomes to improve future predictions.
+
+3.7. Rewards and Incentives
+
+- Awards points for reporting issues.
+- Rewards community organizing and participation.
+- Encourages citizens to monitor the progress of reported issues.
+- Supports reward redemption through the platform.
+
+==================================================
+4. PROJECT VISION
+==================================================
+
+JanSevak aims to build a transparent, accountable, and collaborative civic ecosystem where citizens can participate in solving local problems and authorities can respond more effectively.
+
+Our goal is to turn civic complaints into measurable community action and lasting environmental improvement.
+
+==================================================
+5. PROJECT TAGLINE
+==================================================
+
+Report. Validate. Act. Get Rewarded.
