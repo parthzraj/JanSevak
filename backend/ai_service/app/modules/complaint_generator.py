@@ -7,6 +7,12 @@ def generate_complaint(issue: str, location: str, additional_details: str = "") 
         raise ValueError("Issue cannot be empty.")
     if not location.strip():
         raise ValueError("Location cannot be empty.")
+    if len(issue) > 500:
+        raise ValueError("Issue description too long (max 500 characters).")
+    if len(location) > 200:
+        raise ValueError("Location too long (max 200 characters).")
+    if len(additional_details) > 1000:
+        raise ValueError("Additional details too long (max 1000 characters).")
 
     prompt = f"""You are PrajaPulse, an AI civic grievance assistant.
 Write a formal, polite, and factually grounded complaint that a citizen can submit to their local municipal corporation (e.g. BBMP, Municipal Corporation).
@@ -23,5 +29,6 @@ Requirements:
 5. Keep tone respectful, constructive, and firm.
 6. Do NOT invent dates, reference numbers, or claims not mentioned.
 7. Return ONLY the complete complaint letter.
+8. Keep the letter between 150-250 words.
 """
     return call_ollama_text(prompt)

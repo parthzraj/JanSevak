@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import requests
 from typing import Any, Dict, List, Optional
 from app import config
@@ -22,18 +23,24 @@ def call_ollama_text(prompt: str, json_mode: bool = False, timeout: Optional[int
 
     try:
         response = requests.post(url, json=payload, timeout=timeout_val)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            raise ConnectionError(f"Ollama returned HTTP {response.status_code}: {response.text[:200]}") from err
         data = response.json()
         if "response" not in data:
             raise ValueError(f"Ollama returned unexpected payload: {data}")
-        return data["response"].strip()
+        resp_text = data["response"].strip()
+        if not resp_text:
+            raise ValueError("Ollama returned an empty response. The model may have failed to generate output.")
+        return resp_text
     except requests.exceptions.ConnectionError as err:
         raise ConnectionError(f"Could not connect to Ollama at {config.OLLAMA_URL}. Ensure Ollama is running.") from err
     except requests.exceptions.Timeout as err:
         raise TimeoutError(f"Ollama request timed out after {timeout_val}s.") from err
 
 
-def call_ollama_json(prompt: str, max_retries: int = 2) -> Dict[str, Any]:
+def call_ollama_json(prompt: str, max_retries: int = 3) -> Dict[str, Any]:
     """Call Ollama in JSON mode and parse the returned JSON.
 
     Retries with a stricter prompt if Ollama returns malformed JSON.
@@ -43,6 +50,8 @@ def call_ollama_json(prompt: str, max_retries: int = 2) -> Dict[str, Any]:
 
     for attempt in range(max_retries + 1):
         raw_text = call_ollama_text(current_prompt, json_mode=True)
+        raw_text = re.sub(r'^```(?:json)?\s*', '', raw_text)
+        raw_text = re.sub(r'\s*```$', '', raw_text)
         try:
             return json.loads(raw_text)
         except json.JSONDecodeError as e:
