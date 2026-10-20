@@ -1,0 +1,6 @@
+{
+  "name": "PrajaPulse",
+  "description": "Mobile-first civic engagement platform empowering citizens to report local issues, participate in community solutions, and drive positive local impact.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

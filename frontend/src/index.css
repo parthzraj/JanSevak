@@ -1,0 +1,326 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Official Ashok Navy (Primary Authority) */
+  --color-gov-navy-950: #07172c;
+  --color-gov-navy-900: #0f2d59;
+  --color-gov-navy-800: #163b6f;
+  --color-gov-navy-700: #1d4e8c;
+  --color-gov-navy-600: #2563eb;
+  --color-gov-navy-100: #dbeafe;
+  --color-gov-navy-50: #eff6ff;
+
+  /* National Saffron & Warm Civic Gold */
+  --color-gov-saffron-700: #c2410c;
+  --color-gov-saffron-600: #d97706;
+  --color-gov-saffron-500: #ea580c;
+  --color-gov-saffron-100: #ffedd5;
+  --color-gov-saffron-50: #fff7ed;
+
+  /* Deep Civic Green (Verified, Redressed, Clean City) */
+  --color-gov-green-900: #094f1c;
+  --color-gov-green-800: #0b6623;
+  --color-gov-green-700: #15803d;
+  --color-gov-green-100: #dcfce7;
+  --color-gov-green-50: #f0fdf4;
+
+  /* High-Trust Government Surfaces & Typography */
+  --color-app-bg: #f1f5f9;
+  --color-app-surface: #ffffff;
+  --color-app-main: #0f172a;
+  --color-app-muted: #334155;
+  --color-app-subtle: #64748b;
+  --color-app-border: #cbd5e1;
+
+  --color-accent-orange: #ea580c;
+  --color-accent-orange-dark: #c2410c;
+  --color-accent-orange-light: #fff7ed;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: #f1f5f9;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+html.dark body {
+  background-color: #030712;
+  color: #f8fafc;
+}
+
+/* Comprehensive dark mode surface mappings */
+.dark .bg-white {
+  background-color: #111c2e;
+  color: #f1f5f9;
+}
+
+.dark .bg-\[\#f8fafc\] {
+  background-color: #0b1120;
+}
+
+.dark .bg-\[\#f1f5f9\] {
+  background-color: #070d17;
+}
+
+.dark .bg-\[\#F8FAF9\] {
+  background-color: #0f172a;
+}
+
+.dark .bg-slate-50 {
+  background-color: #0f172a;
+}
+
+.dark .bg-slate-100 {
+  background-color: #1e293b;
+}
+
+.dark .border-\[\#cbd5e1\],
+.dark .border-slate-200,
+.dark .border-slate-100,
+.dark .border-\[\#E2E8E4\] {
+  border-color: #1e293b;
+}
+
+.dark .text-\[\#0f172a\] {
+  color: #f8fafc;
+}
+
+.dark .text-\[\#0f2d59\] {
+  color: #93c5fd;
+}
+
+.dark .text-\[\#334155\] {
+  color: #cbd5e1;
+}
+
+.dark .text-\[\#475569\] {
+  color: #94a3b8;
+}
+
+.dark .text-\[\#64748b\],
+.dark .text-slate-600,
+.dark .text-\[\#98A59E\] {
+  color: #94a3b8;
+}
+
+.dark .text-slate-700,
+.dark .text-slate-800 {
+  color: #e2e8f0;
+}
+
+/* Dark Mode Pill and Badge Surfaces */
+.dark .bg-\[\#eff6ff\] {
+  background-color: #172554;
+  color: #93c5fd;
+}
+
+.dark .bg-\[\#dbeafe\] {
+  background-color: #1e3a8a;
+  color: #bfdbfe;
+}
+
+.dark .bg-\[\#fff7ed\] {
+  background-color: #451a03;
+  color: #fed7aa;
+}
+
+.dark .bg-\[\#FEFBF0\] {
+  background-color: #1e293b;
+  border-color: #334155;
+}
+
+.dark .bg-\[\#FEF3C7\] {
+  background-color: #451a03;
+  color: #fde68a;
+}
+
+.dark .bg-\[\#E0F2FE\] {
+  background-color: #082f49;
+  color: #bae6fd;
+}
+
+.dark .bg-\[\#FEE2E2\] {
+  background-color: #450a0a;
+  color: #fecaca;
+}
+
+.dark .bg-emerald-50,
+.dark .bg-emerald-50\/60,
+.dark .bg-emerald-50\/80 {
+  background-color: #064e3b;
+  color: #a7f3d0;
+}
+
+.dark .bg-amber-50,
+.dark .bg-amber-50\/70 {
+  background-color: #451a03;
+  color: #fde68a;
+}
+
+.dark .bg-rose-50,
+.dark .bg-rose-50\/50,
+.dark .bg-rose-50\/80 {
+  background-color: #4c0519;
+  color: #fecdd3;
+}
+
+.dark .bg-blue-50,
+.dark .bg-\[\#eff6ff\]\/70 {
+  background-color: #172554;
+  color: #bfdbfe;
+}
+
+.dark .bg-red-50 {
+  background-color: #450a0a;
+  color: #fecaca;
+}
+
+.dark .bg-slate-50\/80 {
+  background-color: #0f172a;
+}
+
+.dark .bg-\[\#EAF6EE\],
+.dark .bg-\[\#E7F6ED\] {
+  background-color: #062c19;
+  border-color: rgba(6, 78, 59, 0.6);
+}
+
+.dark .bg-\[\#EBF7F9\] {
+  background-color: #0c2a38;
+  border-color: rgba(14, 116, 144, 0.6);
+}
+
+.dark .bg-\[\#FEF8EB\] {
+  background-color: #33240a;
+  border-color: rgba(180, 83, 9, 0.6);
+}
+
+.dark .bg-\[\#EEF3F6\] {
+  background-color: #1e293b;
+}
+
+.dark input[type="text"],
+.dark input[type="search"],
+.dark input[type="email"],
+.dark input[type="tel"],
+.dark input[type="password"],
+.dark textarea,
+.dark select {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b;
+}
+
+/* Ensure pointing finger (cursor: pointer) for all clickable and interactive elements */
+button,
+a,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+input[type="checkbox"],
+input[type="radio"],
+input[type="file"],
+select,
+summary,
+label,
+[tabindex]:not([tabindex="-1"]),
+.cursor-pointer,
+[onclick] {
+  cursor: pointer !important;
+}
+
+button:hover,
+a:hover,
+[role="button"]:hover,
+label:hover,
+select:hover,
+summary:hover,
+.cursor-pointer:hover {
+  cursor: pointer !important;
+}
+
+button:active,
+a:active,
+[role="button"]:active,
+.cursor-pointer:active {
+  cursor: pointer !important;
+}
+
+/* Custom scrollbar for mobile feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d4ded7;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #bcc8c0;
+}
+
+/* Safe area padding for mobile viewports */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+@keyframes popupFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-popup {
+  animation: popupFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes profileDrawerSlide {
+  from {
+    opacity: 0;
+    transform: translateX(18px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.animate-profile-drawer {
+  animation: profileDrawerSlide 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
