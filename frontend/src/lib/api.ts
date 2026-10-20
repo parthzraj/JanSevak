@@ -78,7 +78,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-<<<<<<< HEAD
 const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
 
@@ -253,11 +252,8 @@ export const markNotificationRead = (id: number | string) =>
 export const markAllNotificationsRead = () => post<{ marked_read: number }>('/api/notifications/read-all');
 
 // ---------------------------------------------------------------------------
-// AI (proxied by the Core API to the AI service)
+// AI (direct to AI service or fallback)
 // ---------------------------------------------------------------------------
-export async function sendChatMessage(message: string): Promise<string> {
-  const response = await request<{ reply: string }>('/api/chatbot', {
-=======
 async function aiRequest<T>(path: string, init: RequestInit): Promise<T> {
   const response = await fetch(`${AI_API_BASE_URL}${path}`, {
     ...init,
@@ -271,7 +267,7 @@ async function aiRequest<T>(path: string, init: RequestInit): Promise<T> {
     let message = `AI service request failed (${response.status})`;
     try {
       const error = (await response.json()) as ApiErrorResponse;
-      if (error.detail) message = error.detail;
+      if (typeof error.detail === 'string') message = error.detail;
     } catch {
       // Preserve the HTTP error
     }
@@ -286,7 +282,6 @@ export async function sendChatMessage(
   history: Array<{ role: string; content: string }> = []
 ): Promise<string> {
   const response = await aiRequest<{ reply: string }>('/api/chatbot', {
->>>>>>> aad957c2516dc610ff14d45f8c84caccbf1152ff
     method: 'POST',
     body: JSON.stringify({ message, history }),
   });
@@ -361,7 +356,7 @@ export async function analyzeImage(imageFile: File): Promise<{
     let message = `Image analysis failed (${response.status})`;
     try {
       const error = (await response.json()) as ApiErrorResponse;
-      if (error.detail) message = error.detail;
+      if (typeof error.detail === 'string') message = error.detail;
     } catch {
       // ignore
     }
