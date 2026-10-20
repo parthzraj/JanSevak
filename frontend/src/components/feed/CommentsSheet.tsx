@@ -143,13 +143,6 @@ export const CommentsSheet: React.FC = () => {
             placeholder="Add to the neighborhood discussion..."
             className="flex-1 text-xs bg-[#f8fafc] border border-[#cbd5e1] rounded-full px-4 py-2.5 focus:outline-none focus:border-[#0f2d59] focus:bg-white transition-all text-[#0f172a] placeholder:text-[#98A59E]"
           />
-          <input
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Add to the neighborhood discussion..."
-            className="flex-1 text-xs bg-[#f8fafc] border border-[#cbd5e1] rounded-full px-4 py-2.5 focus:outline-none focus:border-[#0f2d59] focus:bg-white transition-all text-[#0f172a] placeholder:text-[#98A59E]"
-          />
           <button
             type="submit"
             disabled={!inputText.trim()}

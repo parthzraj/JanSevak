@@ -57,7 +57,10 @@ export const GamesScreen: React.FC = () => {
       // Quiz Finished!
       const totalQuestions = activeQuiz.questions.length;
       const finalScore = correctAnswersCount;
-      const pointsEarned = Math.round((finalScore / totalQuestions) * activeQuiz.pointsReward);
+      const isAlreadyCompleted = Boolean(completedQuizzes[activeQuiz.id]);
+      const pointsEarned = isAlreadyCompleted
+        ? 0
+        : Math.round((finalScore / totalQuestions) * activeQuiz.pointsReward);
 
       completeQuiz(activeQuiz.id, finalScore, pointsEarned);
       setIsQuizFinished(true);

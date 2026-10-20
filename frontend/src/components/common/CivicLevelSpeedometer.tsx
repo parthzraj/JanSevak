@@ -20,15 +20,22 @@ export const CivicLevelSpeedometer: React.FC<CivicLevelSpeedometerProps> = ({
   userLevel = 'Silver',
   theme = 'green',
 }) => {
-  // Determine active level index
-  const userLevelId = userLevel.toLowerCase().split(' ')[0];
-  const defaultIdx = Math.max(
+  // Determine active level index (bronze=0, silver=1, gold=2, platinum=3, legend=4)
+  const levelMap: Record<string, number> = {
+    bronze: 0,
+    silver: 1,
+    gold: 2,
+    platinum: 3,
+    legend: 4,
+  };
+  const userLevelId = userLevel.toLowerCase().trim().split(' ')[0];
+  const initialIdx = levelMap[userLevelId] ?? Math.max(
     0,
     LEVEL_MILESTONES.findIndex((m) => m.id === userLevelId)
   );
 
-  // Allow clicking milestones to preview any tier while defaulting to Gold (as in user screenshot)
-  const [selectedIdx, setSelectedIdx] = useState<number>(2);
+  // Allow clicking milestones to preview any tier
+  const [selectedIdx, setSelectedIdx] = useState<number>(initialIdx);
 
   const currentMilestone = LEVEL_MILESTONES[selectedIdx] || LEVEL_MILESTONES[2];
   const prevMilestone =

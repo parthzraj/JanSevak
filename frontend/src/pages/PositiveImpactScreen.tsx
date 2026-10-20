@@ -41,6 +41,7 @@ export const PositiveImpactScreen: React.FC = () => {
   const touchStartTime = useRef<number>(0);
   const isScrollingRef = useRef<boolean>(false);
 
+  if (reels.length === 0) return <div>No stories yet</div>;
   const currentReel = reels[activeIndex] || reels[0];
 
   // Sync active index with snap-scroll position
