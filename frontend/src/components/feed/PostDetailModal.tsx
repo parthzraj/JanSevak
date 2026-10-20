@@ -908,7 +908,7 @@ export const PostDetailModal: React.FC = () => {
                 </span>
               </div>
             </div>
-          ) : (
+          ) : user.role === 'official' || user.role === 'admin' ? (
             <button
               onClick={() => {
                 resolveReport(post.id);
@@ -919,6 +919,8 @@ export const PostDetailModal: React.FC = () => {
               <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
               <span>Mark Resolved (+50 Pts)</span>
             </button>
+          ) : (
+            <span className="text-[11px] font-semibold text-[#64748b]">Status updates are made by ward officials</span>
           )}
 
           <button

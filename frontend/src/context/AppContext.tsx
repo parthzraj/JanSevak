@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   CivicPost,
   DailyBriefing,
@@ -26,11 +26,37 @@ import {
   INITIAL_BADGES,
   INITIAL_MODULES,
 } from '../mockData/initialData';
+import {
+  ApiError,
+  UNAUTHORIZED_EVENT,
+  addCommentRequest,
+  claimReward,
+  createIssueRequest,
+  fetchIssue,
+  fetchIssues,
+  fetchMe,
+  fetchNotifications,
+  getToken,
+  loginRequest,
+  markAllNotificationsRead,
+  markNotificationRead,
+  registerRequest,
+  removeUpvote,
+  setToken,
+  updateIssueStatus,
+  updateMe,
+  uploadImageDataUrl,
+  upvoteIssue,
+  type BackendTokenResponse,
+} from '../lib/api';
+import { nextLevelPoints, toCivicPost, toComment, toNotification, toUserProfile } from '../lib/mappers';
 
 interface AppContextType {
   user: UserProfile;
   isLoggedIn: boolean;
-  login: (email?: string, name?: string) => void;
+  /** Log in against the Core API. Resolves true on success (an error toast is shown otherwise). */
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (input: { name: string; email: string; password: string; ward?: string }) => Promise<boolean>;
   logout: () => void;
   posts: CivicPost[];
   createReport: (report: {
@@ -41,7 +67,9 @@ interface AppContextType {
     priority: IssuePriority;
     imageUrl?: string;
     images?: string[];
-  }) => string;
+    latitude?: number;
+    longitude?: number;
+  }) => Promise<string | null>;
   toggleUpvote: (postId: string) => void;
   addComment: (postId: string, text: string) => void;
   toggleBookmark: (postId: string) => void;
@@ -124,10 +152,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [theme]);
 
   // Authentication State
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    const saved = localStorage.getItem('prajapulse_auth');
-    return saved !== null ? JSON.parse(saved) : true; // Default logged in for immediate hackathon evaluation
-  });
+  // Logged in = we hold a token from the Core API (see lib/api.ts)
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => getToken() !== null);
 
   // User Profile State
   const [user, setUser] = useState<UserProfile>(() => {
@@ -276,29 +302,140 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const login = (email?: string, name?: string) => {
-    setIsLoggedIn(true);
-    if (email || name) {
-      setUser((prev) => ({
-        ...prev,
-        email: email || prev.email,
-        name: name || prev.name,
-      }));
+  // ---------------------------------------------------------------------
+  // Server sync (Core API, port 8000)
+  // ---------------------------------------------------------------------
+  const inFlight = useRef<Set<string>>(new Set());
+
+  const errText = (e: unknown, fallback = 'Cannot reach the server. Is the Core API running on port 8000?') =>
+    e instanceof ApiError && e.message ? e.message : fallback;
+
+  const applyPoints = (points: number, tier: string) =>
+    setUser((prev) => ({ ...prev, points, level: tier, nextLevelPoints: nextLevelPoints(points) }));
+
+  const refreshUser = useCallback(async () => {
+    try {
+      const me = await fetchMe();
+      setUser((prev) => toUserProfile(me, prev));
+    } catch {
+      /* keep the cached profile */
     }
-    addToast('Welcome back, ' + (name || user.name), 'Connected to PrajaPulse Bengaluru Network', 'success');
+  }, []);
+
+  const refreshPosts = useCallback(async () => {
+    try {
+      const res = await fetchIssues({ page_size: 50, sort: 'recent' });
+      setPosts((prev) => {
+        const bookmarked = new Set(prev.filter((p) => p.isBookmarked).map((p) => p.id));
+        return res.items.map((i) => ({ ...toCivicPost(i), isBookmarked: bookmarked.has(String(i.id)) }));
+      });
+    } catch {
+      /* keep cached posts when the server is unreachable */
+    }
+  }, []);
+
+  const refreshNotifications = useCallback(async () => {
+    try {
+      const res = await fetchNotifications();
+      setNotifications(res.items.map(toNotification));
+    } catch {
+      /* keep cached notifications */
+    }
+  }, []);
+
+  // Load everything once logged in, then refresh periodically
+  useEffect(() => {
+    if (!isLoggedIn || !getToken()) return;
+    refreshUser();
+    refreshPosts();
+    refreshNotifications();
+    const timer = setInterval(() => {
+      refreshPosts();
+      refreshNotifications();
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [isLoggedIn, refreshUser, refreshPosts, refreshNotifications]);
+
+  // The API said our token is no longer valid -> back to the login screen
+  useEffect(() => {
+    const onUnauthorized = () => {
+      setToken(null);
+      setIsLoggedIn(false);
+      addToast('Session expired', 'Please log in again.', 'info');
+    };
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, []);
+
+  // Comments are not part of the feed list: fetch them when a post is opened
+  const loadComments = async (id: string) => {
+    if (!/^\d+$/.test(id)) return; // old mock posts have ids like "post-1234"
+    try {
+      const detail = await fetchIssue(id);
+      const comments = detail.comments.map(toComment);
+      const patch = (p: CivicPost | null) =>
+        p && p.id === id ? { ...p, comments, commentsCount: comments.length } : p;
+      setPosts((prev) => prev.map((p) => (p.id === id ? (patch(p) as CivicPost) : p)));
+      setSelectedPostForDetail(patch);
+      setSelectedPostForComments(patch);
+    } catch {
+      /* comments stay empty */
+    }
+  };
+
+  const detailId = selectedPostForDetail?.id;
+  const commentsId = selectedPostForComments?.id;
+  useEffect(() => {
+    if (detailId) loadComments(detailId);
+    if (commentsId && commentsId !== detailId) loadComments(commentsId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailId, commentsId]);
+
+  const finishLogin = (res: BackendTokenResponse) => {
+    setToken(res.access_token);
+    setUser(toUserProfile(res.user));
+    setIsLoggedIn(true);
+    addToast('Welcome, ' + res.user.name, 'Connected to PrajaPulse Bengaluru Network', 'success');
+  };
+
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      finishLogin(await loginRequest(email.trim(), password));
+      return true;
+    } catch (e) {
+      addToast('Login failed', errText(e), 'info');
+      return false;
+    }
+  };
+
+  const register = async (input: { name: string; email: string; password: string; ward?: string }): Promise<boolean> => {
+    try {
+      finishLogin(await registerRequest({ ...input, email: input.email.trim(), name: input.name.trim() }));
+      return true;
+    } catch (e) {
+      addToast('Could not create account', errText(e), 'info');
+      return false;
+    }
   };
 
   const logout = () => {
+    setToken(null);
     setIsLoggedIn(false);
+    setNotifications([]);
+    setPosts([]);
     addToast('Logged out successfully', 'See you soon!', 'info');
   };
 
   const updateUserProfile = (updates: Partial<UserProfile>) => {
     setUser((prev) => ({ ...prev, ...updates }));
     addToast('Profile Updated', 'Changes saved successfully', 'success');
+    // Persist name / ward on the server (the ward is stored as "Ward 112 - Indiranagar")
+    const next = { ...user, ...updates };
+    const ward = [next.wardNumber, next.neighborhood].filter(Boolean).join(' - ');
+    updateMe({ name: next.name, ward }).catch(() => undefined);
   };
 
-  const createReport = (report: {
+  const createReport = async (report: {
     title: string;
     category: CivicCategory;
     description: string;
@@ -306,226 +443,113 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     priority: IssuePriority;
     imageUrl?: string;
     images?: string[];
-  }): string => {
-    const newId = `post-${Date.now().toString().slice(-4)}`;
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const formattedHours = hours % 12 || 12;
-    const formattedTime = `${formattedHours}:${minutes} ${ampm}`;
+    latitude?: number;
+    longitude?: number;
+  }): Promise<string | null> => {
+    try {
+      // Photos picked in the app are data URLs: upload them first, send the returned URLs with the report
+      const imageUrls: string[] = [];
+      for (const img of (report.images ?? []).slice(0, 6)) {
+        if (img.startsWith('data:')) imageUrls.push(await uploadImageDataUrl(img));
+        else if (/^https?:\/\//.test(img)) imageUrls.push(img);
+      }
 
-    const sampleCategoryImages: Record<CivicCategory, { url: string; grad: string }> = {
-      Roads: {
-        url: 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80',
-        grad: 'linear-gradient(135deg, #2b3a32 0%, #0f2d59 100%)',
-      },
-      Water: {
-        url: 'https://images.unsplash.com/photo-1541888946425-d0fbb186156f?auto=format&fit=crop&w=800&q=80',
-        grad: 'linear-gradient(135deg, #1b384f 0%, #1d4e8c 100%)',
-      },
-      Sanitation: {
-        url: 'https://images.unsplash.com/photo-1530587191325-3db32d826c18?auto=format&fit=crop&w=800&q=80',
-        grad: 'linear-gradient(135deg, #32251a 0%, #5e4835 100%)',
-      },
-      Streetlights: {
-        url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=800&q=80',
-        grad: 'linear-gradient(135deg, #1b2820 0%, #1d4e8c 100%)',
-      },
-      'Public Safety': {
-        url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80',
-        grad: 'linear-gradient(135deg, #3d2417 0%, #c45d22 100%)',
-      },
-      Parks: {
-        url: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=800&q=80',
-        grad: 'linear-gradient(135deg, #1c4b32 0%, #3bb177 100%)',
-      },
-      Community: {
-        url: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
-        grad: 'linear-gradient(135deg, #0f2d59 0%, #1d4e8c 100%)',
-      },
-    };
+      const res = await createIssueRequest({
+        title: report.title,
+        description: report.description,
+        category: report.category,
+        priority: report.priority, // "Urgent" is accepted and stored as "Critical" by the API
+        address: report.locality.slice(0, 255),
+        latitude: report.latitude,
+        longitude: report.longitude,
+        image_urls: imageUrls,
+      });
 
-    const mainImg = report.imageUrl || sampleCategoryImages[report.category].url;
-    const allImages =
-      report.images && report.images.length > 0
-        ? report.images
-        : [
-            mainImg,
-            'https://images.unsplash.com/photo-1578991624414-276ef23a534f?auto=format&fit=crop&w=800&q=80',
-            'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80',
-          ];
+      const post = toCivicPost(res.issue);
+      setPosts((prev) => [post, ...prev.filter((p) => p.id !== post.id)]);
+      setUser((prev) => ({
+        ...prev,
+        points: res.user_points,
+        level: res.user_tier,
+        nextLevelPoints: nextLevelPoints(res.user_points),
+        stats: { ...prev.stats, reportsCount: prev.stats.reportsCount + 1 },
+      }));
+      refreshNotifications();
 
-    const newPost: CivicPost = {
-      id: newId,
-      reporter: {
-        id: user.id,
-        name: user.name,
-        avatar: user.avatar,
-        isVerified: true,
-        wardOrArea: report.locality || `${user.neighborhood} · ${user.wardNumber}`,
-      },
-      timestamp: now.toISOString(),
-      formattedTime,
-      category: report.category,
-      title: report.title,
-      description: report.description,
-      status: 'Reported',
-      priority: report.priority,
-      imageUrl: mainImg,
-      images: allImages,
-      imageFallbackGradient: sampleCategoryImages[report.category].grad,
-      upvotes: 1,
-      hasUpvoted: true,
-      commentsCount: 0,
-      comments: [],
-      isBookmarked: false,
-      whyItMatters: `Civic issue reported directly by resident to ${user.wardNumber} engineering desk.`,
-      communityActionLabel: 'Support this issue',
-      aiInsight: `Auto-triaged: Assigned to Ward ${user.wardNumber} Junior Engineer. Estimated dispatch in 24 hours.`,
-    };
-
-    setPosts((prev) => [newPost, ...prev]);
-
-    // Update user reports count (Points are awarded upon resolution per civic protocol)
-    setUser((prev) => ({
-      ...prev,
-      stats: {
-        ...prev.stats,
-        reportsCount: prev.stats.reportsCount + 1,
-      },
-    }));
-
-    // Add notification
-    const newNotif: UserNotification = {
-      id: 'notif-' + Date.now(),
-      type: 'report_update',
-      title: 'Report Submitted Successfully',
-      message: `Your report #${newId.toUpperCase()} for "${report.title}" has been assigned to Ward ${user.wardNumber} desk. Reward points will be credited once resolved.`,
-      timestamp: 'Just now',
-      isRead: false,
-      group: 'Today',
-      relatedPostId: newId,
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
-
-    addToast(
-      'Report Submitted Successfully',
-      `Assigned tracking ID: #${newId.toUpperCase()}. Points will be awarded once resolved.`,
-      'success'
-    );
-
-    return newId;
+      if (res.points_awarded > 0) {
+        addToast(`Report Submitted! +${res.points_awarded} Points`, `Tracking ID: #${post.id}`, 'reward');
+      } else {
+        addToast('Report Submitted Successfully', `Tracking ID: #${post.id}. Daily 60-point cap reached - no points this time.`, 'success');
+      }
+      return post.id;
+    } catch (e) {
+      addToast('Could not submit report', errText(e), 'info');
+      return null;
+    }
   };
 
-  const resolveReport = (postId: string) => {
-    setPosts((prev) =>
-      prev.map((post) => {
-        if (post.id === postId) {
-          return {
-            ...post,
-            status: 'Resolved',
-            resolvedDate: 'Just now',
-          };
-        }
-        return post;
-      })
-    );
-
-    // Award +50 points to user upon resolution!
-    setUser((prev) => ({
-      ...prev,
-      points: prev.points + 50,
-      stats: {
-        ...prev.stats,
-        resolvedCount: prev.stats.resolvedCount + 1,
-      },
-    }));
-
-    addToast(
-      'Issue Resolved! +50 Points Credited',
-      'The civic grievance has been officially resolved. 50 reward points have been added to your profile!',
-      'reward'
-    );
+  const resolveReport = async (postId: string) => {
+    try {
+      await updateIssueStatus(postId, 'Resolved');
+      await Promise.all([refreshPosts(), refreshUser()]);
+      addToast('Issue Marked Resolved', 'The reporter has been credited with the resolution reward.', 'reward');
+    } catch (e) {
+      addToast('Could not resolve issue', errText(e), 'info');
+    }
   };
 
-  const toggleUpvote = (postId: string) => {
-    setPosts((prev) =>
-      prev.map((post) => {
-        if (post.id === postId) {
-          const hasUpvoted = !post.hasUpvoted;
-          const upvotes = hasUpvoted ? post.upvotes + 1 : Math.max(0, post.upvotes - 1);
-          
-          if (hasUpvoted) {
-            addToast('Issue Endorsed', 'Your support helps prioritize this report for the Ward Committee.', 'success');
-            setUser((u) => ({
-              ...u,
-              points: u.points + 5,
-              stats: { ...u.stats, supportedCount: u.stats.supportedCount + 1 },
-            }));
-          } else {
-            addToast('Endorsement Removed', undefined, 'info');
-            setUser((u) => ({
-              ...u,
-              stats: { ...u.stats, supportedCount: Math.max(0, u.stats.supportedCount - 1) },
-            }));
-          }
-
-          return { ...post, hasUpvoted, upvotes };
-        }
-        return post;
-      })
-    );
+  const toggleUpvote = async (postId: string) => {
+    const post = posts.find((p) => p.id === postId);
+    if (!post || inFlight.current.has(postId)) return;
+    inFlight.current.add(postId);
+    try {
+      const res = post.hasUpvoted ? await removeUpvote(postId) : await upvoteIssue(postId);
+      setPosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, hasUpvoted: res.has_upvoted, upvotes: res.upvotes } : p))
+      );
+      setUser((prev) => ({
+        ...prev,
+        points: res.user_points,
+        level: res.user_tier,
+        nextLevelPoints: nextLevelPoints(res.user_points),
+        stats: {
+          ...prev.stats,
+          supportedCount: Math.max(0, prev.stats.supportedCount + (res.has_upvoted ? 1 : -1)),
+        },
+      }));
+      if (res.has_upvoted) {
+        addToast(
+          res.points_delta > 0 ? `Issue Endorsed +${res.points_delta} Points` : 'Issue Endorsed',
+          res.points_delta > 0
+            ? 'Your support helps prioritize this report for the Ward Committee.'
+            : 'No points this time (daily cap reached or already earned for this issue).',
+          res.points_delta > 0 ? 'reward' : 'success'
+        );
+      } else {
+        addToast('Endorsement Removed', undefined, 'info');
+      }
+    } catch (e) {
+      addToast('Could not update your vote', errText(e), 'info');
+    } finally {
+      inFlight.current.delete(postId);
+    }
   };
 
-  const addComment = (postId: string, text: string) => {
+  const addComment = async (postId: string, text: string) => {
     if (!text.trim()) return;
-    const newComment = {
-      id: 'comm-' + Date.now(),
-      author: user.name,
-      avatar: user.avatar,
-      text: text.trim(),
-      time: 'Just now',
-    };
-
-    setPosts((prev) =>
-      prev.map((post) => {
-        if (post.id === postId) {
-          return {
-            ...post,
-            commentsCount: post.commentsCount + 1,
-            comments: [...post.comments, newComment],
-          };
-        }
-        return post;
-      })
-    );
-
-    if (selectedPostForDetail && selectedPostForDetail.id === postId) {
-      setSelectedPostForDetail((prev) =>
-        prev
-          ? {
-              ...prev,
-              commentsCount: prev.commentsCount + 1,
-              comments: [...prev.comments, newComment],
-            }
-          : null
-      );
+    try {
+      const saved = toComment(await addCommentRequest(postId, text.trim()));
+      const add = <T extends CivicPost | null>(p: T): T =>
+        p && p.id === postId
+          ? ({ ...p, commentsCount: p.commentsCount + 1, comments: [...p.comments, saved] } as T)
+          : p;
+      setPosts((prev) => prev.map((p) => add(p)));
+      setSelectedPostForDetail((prev) => add(prev));
+      setSelectedPostForComments((prev) => add(prev));
+      addToast('Comment Posted', 'Thank you for adding your voice to the neighborhood discussion.', 'info');
+    } catch (e) {
+      addToast('Could not post comment', errText(e), 'info');
     }
-
-    if (selectedPostForComments && selectedPostForComments.id === postId) {
-      setSelectedPostForComments((prev) =>
-        prev
-          ? {
-              ...prev,
-              commentsCount: prev.commentsCount + 1,
-              comments: [...prev.comments, newComment],
-            }
-          : null
-      );
-    }
-
-    addToast('Comment Posted', 'Thank you for adding your voice to the neighborhood discussion.', 'info');
   };
 
   const toggleBookmark = (postId: string) => {
@@ -635,11 +659,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const markAllNotificationsAsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    markAllNotificationsRead().catch(() => undefined);
     addToast('All Caught Up', 'Marked all notifications as read', 'info');
   };
 
   const markNotificationAsRead = (id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+    markNotificationRead(id).catch(() => undefined);
   };
 
   const applyVacancy = (vacancyId: string, applicantNote?: string) => {
@@ -719,43 +745,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const completeQuiz = (quizId: string, score: number, pointsEarned: number) => {
+  const completeQuiz = async (quizId: string, score: number, pointsEarned: number) => {
     setCompletedQuizzes((prev) => ({
       ...prev,
       [quizId]: { score, pointsEarned },
     }));
 
-    setUser((u) => ({
-      ...u,
-      points: u.points + pointsEarned,
-    }));
-
-    addToast(
-      `Quiz Complete! +${pointsEarned} Points`,
-      `Score: ${score} points earned for civic knowledge!`,
-      'reward'
-    );
+    try {
+      const res = await claimReward({ action_type: 'quiz', action_id: quizId, points: pointsEarned });
+      applyPoints(res.user_points, res.user_tier);
+      if (res.duplicate) {
+        addToast('Quiz Complete', 'Points for this quiz were already earned - one reward per quiz.', 'info');
+      } else if (res.awarded === 0) {
+        addToast('Quiz Complete', 'Daily 60-point cap reached - no points this time.', 'info');
+      } else {
+        addToast(`Quiz Complete! +${res.awarded} Points`, `Score: ${score} - great civic knowledge!`, 'reward');
+      }
+    } catch (e) {
+      addToast('Quiz saved, points not credited', errText(e), 'info');
+    }
   };
 
   const completeModuleLesson = (moduleId: string) => {
-    setModules((prev) =>
-      prev.map((mod) => {
-        if (mod.id === moduleId) {
-          const nextProgress = Math.min(100, mod.progress + 25);
-          const isCertified = nextProgress >= 100;
-          if (isCertified && !mod.certified) {
-            setUser((u) => ({ ...u, points: u.points + 60 }));
-            addToast('Module Certified! +60 Points', `Congratulations on completing "${mod.title}"!`, 'reward');
-          }
-          return {
-            ...mod,
-            progress: nextProgress,
-            certified: isCertified,
-          };
-        }
-        return mod;
-      })
-    );
+    const mod = modules.find((m) => m.id === moduleId);
+    if (!mod) return;
+    const nextProgress = Math.min(100, mod.progress + 25);
+    const isCertified = nextProgress >= 100;
+    const newlyCertified = isCertified && !mod.certified;
+
+    setModules((prev) => prev.map((m) => (m.id === moduleId ? { ...m, progress: nextProgress, certified: isCertified } : m)));
+
+    if (newlyCertified) {
+      claimReward({ action_type: 'academy_module', action_id: moduleId, points: 60 })
+        .then((res) => {
+          applyPoints(res.user_points, res.user_tier);
+          addToast(
+            res.awarded > 0 ? `Module Certified! +${res.awarded} Points` : 'Module Certified!',
+            `Congratulations on completing "${mod.title}"!`,
+            'reward'
+          );
+        })
+        .catch((e) => addToast('Module certified, points not credited', errText(e), 'info'));
+    }
   };
 
   const unreadNotificationsCount = notifications.filter((n) => !n.isRead).length;
@@ -766,6 +797,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         user,
         isLoggedIn,
         login,
+        register,
         logout,
         posts,
         createReport,

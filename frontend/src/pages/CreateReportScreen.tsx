@@ -163,7 +163,7 @@ export const CreateReportScreen: React.FC = () => {
     return `${user.neighborhood} · ${user.wardNumber}`;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !description.trim()) {
       addToast('Missing Information', 'Please provide a title and description.', 'info');
@@ -177,19 +177,20 @@ export const CreateReportScreen: React.FC = () => {
 
     setIsSubmitting(true);
 
-    setTimeout(() => {
-      const reportId = createReport({
-        title: title.trim(),
-        category,
-        description: description.trim(),
-        locality: getEffectiveLocalityString(),
-        priority,
-        images: imagesList.length > 0 ? imagesList : undefined,
-      });
+    const coords = pinnedCoords || gpsCoords;
+    const reportId = await createReport({
+      title: title.trim(),
+      category,
+      description: description.trim(),
+      locality: getEffectiveLocalityString(),
+      priority,
+      images: imagesList.length > 0 ? imagesList : undefined,
+      latitude: coords?.lat,
+      longitude: coords?.lng,
+    });
 
-      setIsSubmitting(false);
-      setSubmittedReportId(reportId);
-    }, 700);
+    setIsSubmitting(false);
+    if (reportId) setSubmittedReportId(reportId);
   };
 
   return (

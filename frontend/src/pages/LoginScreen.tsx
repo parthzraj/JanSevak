@@ -5,11 +5,11 @@ import { useApp } from '../context/AppContext';
 
 export const LoginScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useApp();
+  const { login, register } = useApp();
 
   const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('ayush.sharma@prajapulse.org');
-  const [password, setPassword] = useState('prajapulse2026');
+  const [email, setEmail] = useState('ayush@example.com');
+  const [password, setPassword] = useState('demo123');
   const [name, setName] = useState('Ayush Sharma');
   const [ward, setWard] = useState('Ward 112 (Indiranagar)');
   const [showPassword, setShowPassword] = useState(false);
@@ -17,21 +17,24 @@ export const LoginScreen: React.FC = () => {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const finish = async (attempt: () => Promise<boolean>) => {
+    setIsSubmitting(true);
+    const ok = await attempt();
+    setIsSubmitting(false);
+    if (ok) navigate('/home');
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    login(email, isRegister ? name : undefined);
-    navigate('/home');
+    finish(() => (isRegister ? register({ name, email, password, ward }) : login(email, password)));
   };
 
-  const handleQuickDemo = () => {
-    login('ayush.sharma@prajapulse.org', 'Ayush Sharma');
-    navigate('/home');
-  };
+  // Demo accounts created by `python seed_data.py` in backend/core_api
+  const handleQuickDemo = () => finish(() => login('ayush@example.com', 'demo123'));
 
-  const handleGuestAccess = () => {
-    login('citizen.guest@prajapulse.org', 'Citizen Guest');
-    navigate('/home');
-  };
+  const handleGuestAccess = () => finish(() => login('rahul@example.com', 'demo123'));
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col justify-between p-4 sm:p-6 max-w-md mx-auto w-full">
@@ -207,9 +210,12 @@ export const LoginScreen: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full py-3 px-4 rounded-xl bg-[#0f2d59] hover:bg-[#1d4e8c] text-white font-bold text-xs shadow-md shadow-[#0f2d59]/20 transition-all flex items-center justify-center gap-2 active:scale-98"
+            disabled={isSubmitting}
+            className="w-full py-3 px-4 rounded-xl bg-[#0f2d59] hover:bg-[#1d4e8c] disabled:opacity-60 text-white font-bold text-xs shadow-md shadow-[#0f2d59]/20 transition-all flex items-center justify-center gap-2 active:scale-98"
           >
-            <span>{isRegister ? 'Register & Join PrajaPulse' : 'Sign In to PrajaPulse'}</span>
+            <span>
+              {isSubmitting ? 'Please wait...' : isRegister ? 'Register & Join PrajaPulse' : 'Sign In to PrajaPulse'}
+            </span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>

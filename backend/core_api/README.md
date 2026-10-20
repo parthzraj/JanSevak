@@ -1,113 +1,74 @@
-# Developer 2 Workspace: Core Backend API (`backend/core_api/`)
+# PrajaPulse Core API (`backend/core_api/`)
 
-> **Assigned to:** Developer 2 (Core Backend, Database & Business Logic Engineer)  
-> **Server Port:** `http://localhost:8000`  
-> **Your Deliverable:** Central REST API serving authentication, complaints CRUD, voting, comments, and rewards.
+Developer 2's service: auth, civic issues, voting, comments, rewards, notifications, uploads and the
+proxy to the AI service. Runs on **port 8000**, stores data in **SQLite** (no setup, no cost).
 
----
+> Do not touch `frontend/`, `backend/ai_service/` or `backend/CONTRACT.md`.
 
-## 🛑 STRICT RULES (What NOT to Touch)
+## Run it
 
-1. ❌ **DO NOT TOUCH `frontend/`**: The frontend repository is locked. Do not edit, delete, or rename any frontend files.
-2. ❌ **DO NOT TOUCH `backend/ai_service/`**: This is Developer 1's workspace (running on Port 8001 with Ollama models).
-3. ❌ **DO NOT MODIFY `backend/CONTRACT.md`**: This is the immutable API contract between your Core API (8000) and Developer 1's AI Service (8001). Any changes must be mutually agreed upon.
-
----
-
-## 🎯 What You Must Build (Step-by-Step)
-
-You have been provided with starter boilerplate in `backend/core_api/app/`. Your job is to implement the business logic and database persistence for the following modules:
-
-### Task 1: Authentication & User Accounts (`app/routers/auth.py` & `app/models/user.py`)
-- `POST /api/auth/register`: Accept name, email, password, ward. Hash the password with bcrypt, save user in database, and return a JWT access token.
-- `POST /api/auth/login`: Verify email + password, return JWT access token.
-- `GET /api/auth/me`: Protected route (requires `Bearer <token>`). Return the current user's profile, karma points, and tier.
-- `PATCH /api/auth/me`: Update editable profile fields (name, ward, avatar).
-
-### Task 2: Civic Issues CRUD (`app/routers/issues.py` & `app/models/issue.py`)
-- `GET /api/issues`: Return paginated list of civic grievances. Support query filters:
-  - `category` (Roads, Water, Sanitation, Streetlights, Public Safety, Parks)
-  - `status` (Reported, Under Review, In Progress, Resolved)
-  - `priority` (Low, Medium, High, Urgent / Critical)
-  - `sort` (recent, votes)
-  - Include a boolean `has_upvoted` flag indicating if the requesting user voted on each issue.
-- `POST /api/issues`: Protected route. Accept issue title, description, category, priority, address, lat/lng, and image URLs.
-  - Save to database.
-  - Automatically credit **+20 reward points** to the reporting citizen using the rewards engine.
-- `GET /api/issues/{id}`: Return complete details of a specific issue, including timeline and comments.
-- `PATCH /api/issues/{id}/status`: Transition issue status (`Reported` -> `Under Review` -> `In Progress` -> `Resolved`).
-  - When marked `Resolved`, credit **+50 reward points** to the original reporter.
-
-### Task 3: Upvoting & Comments (`app/routers/votes.py`)
-- `POST /api/issues/{id}/upvote`: Protected route.
-  - Enforce **strictly 1 vote per user per issue** (use database UniqueConstraint).
-  - Increment issue upvotes counter.
-  - Credit **+5 reward points** to the voter.
-- `DELETE /api/issues/{id}/upvote`: Remove upvote and deduct the 5 points.
-- `POST /api/issues/{id}/comments`: Add a discussion comment to the issue.
-- `GET /api/issues/{id}/comments`: Return list of comments for an issue.
-
-### Task 4: Rewards & Anti-Abuse Engine (`app/services/points_engine.py` & `app/routers/rewards.py`)
-Implement the gamification rules specified in the project documentation:
-- **Daily Cap:** Max **60 points** per user per day. Any points earned beyond 60 in a calendar day are clipped to 0.
-- **Duplicate Prevention:** Record every point transaction with `(user_id, action_type, action_id)`. If the same action ID is submitted twice, reject duplicate points (fixes infinite points farming).
-- **No Self-Verification:** Users cannot vote on or verify their own reports for points.
-- **Tier Progression:**
-  - Bronze: 0–99 pts
-  - Silver: 100–299 pts
-  - Gold: 300–749 pts
-  - Platinum: 750–1,999 pts
-  - Legend: 2,000+ pts
-- Endpoints:
-  - `GET /api/rewards/wallet`: Current balance, tier, progress to next tier, points earned today, recent transactions.
-  - `GET /api/rewards/history`: Transaction ledger.
-  - `GET /api/rewards/leaderboard`: Top 20 ranking citizens.
-
-### Task 5: AI Proxy Endpoints (`app/routers/proxy_ai.py`)
-When the frontend requests AI features, your server proxies the request to Developer 1's AI Service on Port 8001:
-- `POST /api/ai/chatbot` -> forwards to `http://localhost:8001/api/chatbot`
-- `POST /api/ai/complaint/generate` -> forwards to `http://localhost:8001/api/complaint/generate`
-- `POST /api/ai/hazard-alerts` -> forwards to `http://localhost:8001/api/hazard-alerts`
-- `POST /api/ai/suggestive-remarks` -> forwards to `http://localhost:8001/api/suggestive-remarks`
-*(Check `backend/CONTRACT.md` for exact JSON payloads and response structures).*
-
----
-
-## 🚀 How to Run Your Service
-
-### 1. Setup Virtual Environment
 ```bash
 cd backend/core_api
 python -m venv .venv
-
-# On Windows:
-.venv\Scripts\activate
-# On Mac/Linux:
-source .venv/bin/activate
-
+.venv\Scripts\activate          # Windows   (Mac/Linux: source .venv/bin/activate)
 pip install -r requirements.txt
-```
-
-### 2. Configure Environment
-Copy `.env.example` to `.env`:
-```bash
-cp .env.example .env
-```
-Default SQLite database (`prajapulse.db`) is configured out of the box.
-
-### 3. Start the Server
-```bash
+copy .env.example .env          # Mac/Linux: cp .env.example .env
+python seed_data.py             # optional demo data (add --reset to wipe first)
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-Interactive Swagger API documentation:
-👉 **`http://localhost:8000/docs`**
 
-### 4. Optional: Seed Demo Accounts
-```bash
-python seed_data.py
-```
-Creates 3 test citizens:
-- `ayush@example.com` / `demo123` (Gold tier, 340 pts)
-- `priya@example.com` / `demo123` (Silver tier, 180 pts)
-- `rahul@example.com` / `demo123` (Bronze tier, 40 pts)
-along with 5 realistic civic complaints.
+Swagger UI: http://localhost:8000/docs (click **Authorize**, log in with an email + password).
+
+Tests: `python -m pytest -q` (uses a throw-away database, no AI service needed).
+
+## Demo accounts (`python seed_data.py`, password `demo123`)
+
+| Email | Tier | Points | Notes |
+|---|---|---|---|
+| ayush@example.com | Gold | 340 | citizen |
+| priya@example.com | Silver | 180 | citizen |
+| rahul@example.com | Bronze | 40 | citizen |
+| official@example.com | - | 0 | municipal official: the only role that can change issue status |
+
+## Endpoints (all under `/api`)
+
+| Area | Endpoint |
+|---|---|
+| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PATCH /auth/me` (`POST /auth/token` is the form login used by Swagger) |
+| Issues | `GET /issues` (`category`, `status`, `priority`, `q`, `sort=recent\|votes`, `page`, `page_size`), `POST /issues`, `GET /issues/{id}`, `PATCH /issues/{id}/status` (official/admin only) |
+| Votes | `POST /issues/{id}/upvote`, `DELETE /issues/{id}/upvote` |
+| Comments | `POST /issues/{id}/comments`, `GET /issues/{id}/comments` |
+| Rewards | `GET /rewards/wallet`, `GET /rewards/history`, `GET /rewards/leaderboard`, `POST /rewards/claim` (quiz / academy only) |
+| Notifications | `GET /notifications`, `PATCH /notifications/{id}/read`, `POST /notifications/read-all` |
+| Uploads | `POST /uploads` (multipart `file`, returns `{"url": "/uploads/..."}`; send that URL in `image_urls` when creating an issue) |
+| AI proxy | `POST /ai/chatbot`, `/ai/complaint/generate`, `/ai/problem-description`, `/ai/hazard-alerts`, `/ai/suggestive-remarks`, `/ai/feed/prioritize`, `/ai/complaint/analyze-image`, `/ai/complaint/prepare-with-image`; `GET /ai/health` |
+| Health | `GET /` and `GET /api/health` |
+
+The proxy forwards to `AI_SERVICE_URL` (default `http://localhost:8001`) using the shapes in `CONTRACT.md`.
+If Developer 1's service is down you get `503 {"detail": "AI inference engine is currently unreachable..."}`.
+`POST /api/chatbot` and `POST /api/complaint/generate` (no `/ai`) also work, because the current frontend
+(`src/lib/api.ts`) calls those paths directly.
+
+## Rewards rules (implemented in `app/services/points_engine.py`)
+
+* Report +20 (+10 if it has a photo, +5 if it has an address or GPS), upvote someone else's report +5,
+  your report gets resolved +50. Cleanup / volunteer actions are in the points table for the NGO flow later.
+* **Daily cap 60 points** per calendar day (Asia/Kolkata, change with `DAY_RESET_TZ`). Extra points are clipped.
+* **No duplicates:** `(user_id, action_type, action_id)` is unique, so the same action never pays twice.
+* **No self-verification:** you cannot upvote your own report.
+* Removing an upvote takes back what it paid, once. Vote/unvote cycles cannot farm points.
+* Tiers: Bronze 0-99, Silver 100-299, Gold 300-749, Platinum 750-1999, Legend 2000+.
+
+## Decisions worth knowing about
+
+* **Priority:** stored as `Critical` (per `CONTRACT.md`). The API accepts `Urgent` as input, and every issue
+  response has `priority` (`Critical`) plus `priority_ui` (`Urgent`) so the frontend can use either.
+* **Officials:** `roles.md` didn't say who may change status. Letting any user do it would let reporters
+  resolve their own issue for +50, so I added a `role` column (`citizen` / `official` / `admin`).
+  To promote someone: `UPDATE users SET role='official' WHERE email='...';`
+* **Passwords:** hashed with the `bcrypt` package directly. `passlib` breaks with current bcrypt versions.
+* **`POST /rewards/claim`** exists because quizzes are scored in the browser. The server cannot check the quiz,
+  so it limits the points per type, allows one claim per quiz id, and applies the daily cap. A determined user
+  can still invent quiz ids up to the 60-point cap; a server-side quiz catalogue would close that.
+* **AI proxy is open by default** (the frontend has no login wired up yet). Set `AI_PROXY_REQUIRE_AUTH=true` once it does.
+* Set a real `SECRET_KEY` in `.env` before deploying anywhere public.

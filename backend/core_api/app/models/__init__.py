@@ -1,17 +1,14 @@
-"""Models package exporting all database entities for SQLAlchemy registration."""
-
-from app.models.user import User
-from app.models.issue import CivicIssue, IssueVote, IssueComment, IssueEvidence
-from app.models.reward import RewardTransaction, CompletedQuiz
+from app.models.issue import CivicIssue, IssueComment, IssueTimelineEvent, IssueVote
 from app.models.notification import Notification
+from app.models.reward import RewardTransaction
+from app.models.user import User
 
 __all__ = [
     "User",
     "CivicIssue",
     "IssueVote",
     "IssueComment",
-    "IssueEvidence",
+    "IssueTimelineEvent",
     "RewardTransaction",
-    "CompletedQuiz",
     "Notification",
 ]

@@ -238,6 +238,7 @@ export interface UserProfile {
   level: string;
   nextLevelPoints: number;
   joinedDate: string;
+  role?: 'citizen' | 'official' | 'admin';
   stats: {
     reportsCount: number;
     supportedCount: number;
