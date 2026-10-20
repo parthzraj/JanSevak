@@ -1,5 +1,7 @@
+import json
 from app.chatbot.chatbot import chat_with_prajapulse
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from requests.exceptions import RequestException
 from app.problem_description.processor import process_problem_description
@@ -18,6 +20,17 @@ app = FastAPI(
     version="1.0.0",
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 class ComplaintRequest(BaseModel):
     issue: str
@@ -31,6 +44,11 @@ def home():
         "message": "PrajaPulse AI API is running",
         "module": "Complaint Generator",
     }
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "jansevak-ai"}
 
 
 @app.post("/api/complaint/generate")
