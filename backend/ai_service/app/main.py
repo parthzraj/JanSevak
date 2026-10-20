@@ -40,6 +40,35 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def warmup_models():
+    """Pre-load models into GPU memory on server start for faster first requests."""
+    if not config.MODEL_WARMUP_ON_STARTUP:
+        logger.info("Model warmup disabled via config.")
+        return
+    try:
+        logger.info("Warming up text model (%s)...", config.TEXT_MODEL)
+        from app.modules.ollama_client import call_ollama_text
+        call_ollama_text("Hi", timeout=60)
+        logger.info("Text model warmed up successfully.")
+    except Exception as e:
+        logger.warning("Text model warmup failed (non-fatal): %s", e)
+    try:
+        logger.info("Warming up vision model (%s)...", config.VISION_MODEL)
+        import base64
+        from PIL import Image as PILImage
+        import io as sio
+        tiny = PILImage.new("RGB", (8, 8), color=(128, 128, 128))
+        buf = sio.BytesIO()
+        tiny.save(buf, format="JPEG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        from app.modules.ollama_client import call_ollama_vision
+        call_ollama_vision("Describe.", b64, timeout=120)
+        logger.info("Vision model warmed up successfully.")
+    except Exception as e:
+        logger.warning("Vision model warmup failed (non-fatal): %s", e)
+
+
 @app.get("/")
 def health_check():
     """Service status and configured models."""

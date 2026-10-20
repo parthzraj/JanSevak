@@ -7,17 +7,29 @@ def prioritize_complaints(complaints: List[Dict[str, Any]]) -> List[str]:
     """Rank complaints by urgency, returning the list of complaint IDs in descending urgency order."""
     if not complaints:
         return []
+    if len(complaints) > 20:
+        raise ValueError("Too many complaints. Maximum 20 at a time.")
 
     # Normalize original IDs to string to prevent int-str mismatch bugs
     original_ids = [str(c.get("id")) for c in complaints if "id" in c]
     if not original_ids:
         raise ValueError("Every complaint must contain an 'id' field.")
+    for c in complaints:
+        if "title" not in c:
+            raise ValueError("Every complaint must contain a 'title' field.")
+
+    truncated = []
+    for c in complaints:
+        tc = {**c}
+        if "description" in tc and len(str(tc["description"])) > 100:
+            tc["description"] = str(tc["description"])[:100] + "..."
+        truncated.append(tc)
 
     prompt = f"""You are PrajaPulse, a civic prioritization assistant.
 Rank the following complaints from highest to lowest urgency based on public safety, life risk, and disruption impact.
 
 Complaints list:
-{json.dumps(complaints, ensure_ascii=False)}
+{json.dumps(truncated, ensure_ascii=False)}
 
 Rules:
 - High priority to: open manholes, live wires, flooding, water contamination, major traffic blocks.

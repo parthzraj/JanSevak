@@ -9,6 +9,7 @@ import {
   PhoneCall,
   ExternalLink,
 } from 'lucide-react';
+import { sendChatMessage } from '../../lib/api';
 
 interface ChatMessage {
   id: string;
@@ -74,159 +75,7 @@ export const CivicChatbot: React.FC<CivicChatbotProps> = ({ isReelsPage = false 
     }
   }, [isOpen, messages, isTyping]);
 
-  // Frontend-only intelligence engine responding to queries
-  const generateBotReply = (userQuery: string): ChatMessage => {
-    const q = userQuery.toLowerCase().trim();
-    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    // 1. Pothole / Roads / Footpath
-    if (q.includes('pothole') || q.includes('road') || q.includes('asphalt') || q.includes('crater') || q.includes('footpath')) {
-      return {
-        id: `bot-${Date.now()}`,
-        sender: 'bot',
-        text: 'To report road hazards or potholes in Ward 112:\n\n1. Take 1-2 clear daytime photos of the pothole.\n2. Note landmark (e.g. 12th Main Road, near Metro station).\n3. Submit with GPS location.\n\nWard Engineers are mandated to inspect within 24 hours under the BBMP Pothole Action Plan.',
-        timestamp: timeStr,
-        detailsList: [
-          'High priority: cavities > 50mm depth',
-          'Geo-tagged automatic ward assignment',
-          'Earn +50 Civic Karma points upon verification',
-        ],
-        action: {
-          label: '📸 Open Report Camera',
-          path: '/create-report',
-        },
-      };
-    }
-
-    // 2. Track / Status / Complaint / #REP
-    if (q.includes('track') || q.includes('status') || q.includes('rep-') || q.includes('complaint') || q.includes('progress')) {
-      return {
-        id: `bot-${Date.now()}`,
-        sender: 'bot',
-        text: 'Live status for Complaint #REP-8941:\n\n📍 Location: Indiranagar 12th Main\n🚧 Issue: Deep Asphalt Cavity\n👷 Assigned to: BBMP Ward 112 Road Maintenance Unit\n⏱️ Target Resolution: Within 36 Hours\n\nStatus: [In Progress - Work Order Approved]',
-        timestamp: timeStr,
-        detailsList: [
-          'Step 1: Citizen Report submitted (Oct 18, 08:30 AM) ✅',
-          'Step 2: Community Verified with 89 upvotes ✅',
-          'Step 3: Executive Engineer site inspection completed ✅',
-          'Step 4: Cold-mix patch resurfacing scheduled today ⏳',
-        ],
-        action: {
-          label: '📊 View Reports Analysis',
-          path: '/report-analysis',
-        },
-      };
-    }
-
-    // 3. Badges / Levels / Points / Gamification
-    if (q.includes('badge') || q.includes('level') || q.includes('point') || q.includes('rank') || q.includes('bronze') || q.includes('silver') || q.includes('gold') || q.includes('platinum')) {
-      return {
-        id: `bot-${Date.now()}`,
-        sender: 'bot',
-        text: 'Here is the Official Civic Gamification Tier System:\n\n🥉 Bronze Citizen (0 - 250 pts): Starter tier, community voter.\n🥈 Silver Guardian (251 - 750 pts): 5+ verified reports filed.\n🥇 Gold Champion (751 - 1,500 pts): Verified ward cleanup leader.\n💎 Platinum Ambassador (1,501+ pts): Top civic influencer with official municipal commendation certificate!',
-        timestamp: timeStr,
-        detailsList: [
-          'Volunteer Regular: 5 cleanup drives attended',
-          'Clear Reporter: 10 photo-verified hazard submissions',
-          'Ward Mobilizer: 20 volunteers mobilized',
-          'Eyes on the Street: 10 status monitoring audits',
-        ],
-        action: {
-          label: '🏅 Check My Badges & Tier',
-          path: '/badges-certificates',
-        },
-      };
-    }
-
-    // 4. Helplines / Emergency / Numbers
-    if (q.includes('help') || q.includes('emergency') || q.includes('number') || q.includes('contact') || q.includes('police') || q.includes('fire') || q.includes('water') || q.includes('electricity') || q.includes('bescom')) {
-      return {
-        id: `bot-${Date.now()}`,
-        sender: 'bot',
-        text: 'Official 24x7 Civic Helplines for Bengaluru / Ward 112:',
-        timestamp: timeStr,
-        helplines: [
-          { name: '🚨 All-in-One Emergency', number: '112', desc: 'Police, Fire, Medical' },
-          { name: '🏛️ BBMP Central Helpline', number: '1916', desc: 'Potholes, garbage, flooding' },
-          { name: '⚡ BESCOM Electricity', number: '1912', desc: 'Power cuts, fallen cables' },
-          { name: '💧 BWSSB Water & Sewage', number: '1916', desc: 'Water leak, pipeline bursts' },
-          { name: '🚑 Ambulance Services', number: '108', desc: 'Medical emergencies' },
-        ],
-      };
-    }
-
-    // 5. Cleanliness / Garbage / Waste
-    if (q.includes('garbage') || q.includes('waste') || q.includes('dump') || q.includes('trash') || q.includes('sweep') || q.includes('drain')) {
-      return {
-        id: `bot-${Date.now()}`,
-        sender: 'bot',
-        text: 'Garbage & Waste Management Protocol:\n\n• Door-to-door wet waste collection: Daily 7:00 AM - 10:00 AM.\n• Dry waste drop-off centers: Active every Wednesday & Saturday at Ward 112.\n• Black spots / open dumping: File an urgent photo report to alert the Junior Health Inspector (JHI).',
-        timestamp: timeStr,
-        action: {
-          label: '🗑️ File Waste Dumping Report',
-          path: '/create-report',
-        },
-      };
-    }
-
-    // 6. Volunteers / Drives / Vacancies
-    if (q.includes('volunteer') || q.includes('drive') || q.includes('cleanup') || q.includes('weekend') || q.includes('vacancy') || q.includes('join')) {
-      return {
-        id: `bot-${Date.now()}`,
-        sender: 'bot',
-        text: 'Upcoming Civic Drives in Ward 112:\n\n🌱 Binnamangala Lake Perimeter Cleanliness: Saturday 7:30 AM (12 volunteers confirmed)\n🌳 Pocket Park Greening & Sapling Planting: Sunday 8:00 AM\n\nAttending earns 150 points and progress towards the "Volunteer Regular" badge!',
-        timestamp: timeStr,
-        action: {
-          label: '👥 View Volunteer Vacancies',
-          path: '/vacancies',
-        },
-      };
-    }
-
-    // 7. 7 AM Briefing / City Briefing
-    if (q.includes('7 am') || q.includes('7am') || q.includes('briefing') || q.includes('morning') || q.includes('featured')) {
-      return {
-        id: `bot-${Date.now()}`,
-        sender: 'bot',
-        text: 'The 7:00 AM City Briefing banner is your daily morning digest. It summarizes:\n\n• Top priority civic fixes in your neighborhood\n• Scheduled utility maintenance (BESCOM/BWSSB)\n• Air quality & weather updates\n• Verified positive community impacts achieved by fellow citizens.',
-        timestamp: timeStr,
-        action: {
-          label: '☀️ View Home Briefing',
-          path: '/home',
-        },
-      };
-    }
-
-    // 8. Greetings / Casual
-    if (q.includes('hi') || q.includes('hello') || q.includes('hey') || q.includes('namaste') || q.includes('good morning') || q.includes('sup')) {
-      return {
-        id: `bot-${Date.now()}`,
-        sender: 'bot',
-        text: 'Hello there! 😊 I am here to make civic problem-solving effortless. You can ask me how to report broken streetlights, track your complaint progress, check emergency municipal helplines, or inspect your citizen badges!',
-        timestamp: timeStr,
-      };
-    }
-
-    // 9. Default Fallback
-    return {
-      id: `bot-${Date.now()}`,
-      sender: 'bot',
-      text: `Thanks for asking about "${userQuery}". As your Ward 112 Civic Assistant, I can instantly help you with:`,
-      timestamp: timeStr,
-      detailsList: [
-        'Reporting potholes, garbage, or water leaks with photos',
-        'Checking real-time municipal resolution status',
-        'Leveling up from Bronze to Platinum Citizen',
-        'Finding weekend community volunteer drives',
-      ],
-      action: {
-        label: '📸 Report an Issue',
-        path: '/create-report',
-      },
-    };
-  };
-
-  const handleSendMessage = (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string) => {
     const query = textToSend || inputText;
     if (!query.trim()) return;
 
@@ -242,12 +91,41 @@ export const CivicChatbot: React.FC<CivicChatbotProps> = ({ isReelsPage = false 
     setInputText('');
     setIsTyping(true);
 
-    // Realistic typing delay (500ms) for high-fidelity chat experience
-    setTimeout(() => {
-      const botResponse = generateBotReply(query);
+    try {
+      // Build history from messages for context
+      const history = messages
+        .filter((m) => m.id !== 'welcome-1')
+        .map((m) => ({
+          role: m.sender === 'user' ? 'user' : 'assistant',
+          content: m.text,
+        }));
+
+      const reply = await sendChatMessage(query.trim(), history);
+      const botTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
       setIsTyping(false);
-      setMessages((prev) => [...prev, botResponse]);
-    }, 500);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          text: reply,
+          timestamp: botTime,
+        },
+      ]);
+    } catch (error) {
+      setIsTyping(false);
+      const botTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          text: 'I\'m having trouble connecting to the AI service right now. Please try again in a moment. If the issue persists, check that the AI service is running on port 8001.',
+          timestamp: botTime,
+        },
+      ]);
+    }
   };
 
   const handleActionClick = (path?: string) => {
@@ -484,7 +362,7 @@ export const CivicChatbot: React.FC<CivicChatbotProps> = ({ isReelsPage = false 
 
             {/* Micro Demo Disclaimer */}
             <div className="bg-[#f1f5f9] py-1 text-center text-[9.5px] text-[#64748b] border-t border-[#cbd5e1]">
-              Frontend Demo • Offline Instant Response • No API needed
+              Powered by PrajaPulse AI
             </div>
           </div>
         )}

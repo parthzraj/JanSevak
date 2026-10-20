@@ -6,6 +6,8 @@ def generate_suggestive_remarks(issue: str, existing_description: str = "") -> D
     """Generate two-column suggestive remarks: what citizens can do vs what government must do."""
     if not issue.strip():
         raise ValueError("Issue cannot be empty.")
+    if len(issue) > 500:
+        raise ValueError("Issue too long (max 500 characters).")
 
     prompt = f"""You are PrajaPulse, an AI civic advisor.
 For this civic issue, provide actionable guidance for both the community/citizens and the local municipal authority.
@@ -43,6 +45,6 @@ Rules:
         ]
 
     return {
-        "citizen_actions": [str(x).strip() for x in citizen if str(x).strip()][:5],
-        "government_actions": [str(x).strip() for x in govt if str(x).strip()][:5],
+        "citizen_actions": [str(x).strip()[:100] for x in citizen if str(x).strip()][:5],
+        "government_actions": [str(x).strip()[:100] for x in govt if str(x).strip()][:5],
     }

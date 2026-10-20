@@ -18,6 +18,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { CivicCategory, IssuePriority } from '../types';
 import { MapPickerModal } from '../components/report/MapPickerModal';
+import { improveDescription } from '../lib/api';
 
 export const CreateReportScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ export const CreateReportScreen: React.FC = () => {
   const [priority, setPriority] = useState<IssuePriority>('High');
   const [imagesList, setImagesList] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAiDrafting, setIsAiDrafting] = useState(false);
   const [submittedReportId, setSubmittedReportId] = useState<string | null>(null);
 
   // Location fields
@@ -38,37 +40,6 @@ export const CreateReportScreen: React.FC = () => {
   const [isLocatingGps, setIsLocatingGps] = useState(false);
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
 
-  // Pre-baked smart descriptions by category for the "Generate description with AI" feature
-  const aiSampleDescriptions: Record<CivicCategory, { title: string; desc: string }> = {
-    Roads: {
-      title: 'Deep Trench Cave-in Causing Vehicle Skidding near Main Signal',
-      desc: 'Significant asphalt collapse of approx 2ft depth resulting from unsealed telecommunications trenching. Two-wheeler riders face severe accident hazards, especially during nighttime. Immediate barricading and cold-mix resurfacing required.',
-    },
-    Water: {
-      title: 'High Pressure Potable Water Pipeline Leak Submerging Sidewalk',
-      desc: 'Continuous stream of clean drinking water gushing from damaged sub-surface junction valve onto pedestrian footpath. Thousands of liters wasting while adjacent residential blocks report critical pressure drop.',
-    },
-    Sanitation: {
-      title: 'Overflowing Municipal Dumpster and Illegal Secondary Dumping',
-      desc: 'Collection bins have remained unemptied for 48 hours, causing spillover across the road edge. Stray animal scavenging and severe odor impacting local residents and school children. Prompt clearance and bin sanitization requested.',
-    },
-    Streetlights: {
-      title: 'Multiple Non-Functioning LED Streetlights Creating Dangerous Dark Spot',
-      desc: 'Three consecutive streetlights between Cross 4 and Cross 6 have been non-operational for 3 nights. Footpath is completely in the dark, posing major safety risks for female commuters and elder walkers returning from transit.',
-    },
-    'Public Safety': {
-      title: 'Exposed Live High-Voltage Cable Loom on Pedestrian Crosswalk',
-      desc: 'Unlatched utility transformer box with frayed electrical insulation dangling at shoulder height along school walking route. Requires emergency power isolation and heavy-duty locking shroud before monsoon drizzle.',
-    },
-    Parks: {
-      title: 'Broken Children Swing Hardware & Uprooted Tree Limb in Public Park',
-      desc: 'Metal support chain snapped on two toddler swings creating sharp jagged iron edges. In addition, an overgrown dried bough is dangling overhead near the walking loop. Urgent maintenance and safety pruning needed.',
-    },
-    Community: {
-      title: 'Footpath Obstruction by Commercial Construction Rubble',
-      desc: 'Commercial building contractor has piled 4 tons of gravel and sand directly across the public sidewalk, forcing pedestrians into oncoming heavy road traffic. Enforcement notice required under municipal public street regulations.',
-    },
-  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -89,12 +60,22 @@ export const CreateReportScreen: React.FC = () => {
     setImagesList((prev) => prev.filter((_, idx) => idx !== idxToRemove));
   };
 
-  const handleGenerateAIDescription = () => {
-    const sample = aiSampleDescriptions[category];
-    if (!title) {
-      setTitle(sample.title);
+  const handleGenerateAIDescription = async () => {
+    const rawText = description.trim() || title.trim();
+    if (!rawText) {
+      addToast('Input Needed', 'Please enter a rough description or title first, then tap "Draft with AI" to polish it.', 'info');
+      return;
     }
-    setDescription(sample.desc);
+    setIsAiDrafting(true);
+    try {
+      const improved = await improveDescription(rawText);
+      setDescription(improved);
+      addToast('AI Draft Ready', 'Your description has been polished by AI.', 'success');
+    } catch (error) {
+      addToast('AI Unavailable', error instanceof Error ? error.message : 'Could not reach the AI service. Please try again.', 'info');
+    } finally {
+      setIsAiDrafting(false);
+    }
   };
 
   // Acquire current GPS location
@@ -337,10 +318,20 @@ export const CreateReportScreen: React.FC = () => {
             <button
               type="button"
               onClick={handleGenerateAIDescription}
-              className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0f2d59] dark:text-blue-300 hover:text-[#1d4e8c] bg-[#eff6ff] dark:bg-blue-950/60 px-2 py-0.5 rounded-lg border border-transparent dark:border-blue-900/40 transition-colors cursor-pointer"
+              disabled={isAiDrafting}
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0f2d59] dark:text-blue-300 hover:text-[#1d4e8c] bg-[#eff6ff] dark:bg-blue-950/60 px-2 py-0.5 rounded-lg border border-transparent dark:border-blue-900/40 transition-colors cursor-pointer disabled:opacity-50"
             >
-              <Sparkles className="w-3 h-3 text-[#0f2d59] dark:text-blue-300" />
-              <span>Draft with AI</span>
+              {isAiDrafting ? (
+                <>
+                  <span className="w-3 h-3 border-2 border-[#0f2d59] border-t-transparent rounded-full animate-spin" />
+                  <span>Drafting...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3 h-3 text-[#0f2d59] dark:text-blue-300" />
+                  <span>Draft with AI</span>
+                </>
+              )}
             </button>
           </div>
           <textarea

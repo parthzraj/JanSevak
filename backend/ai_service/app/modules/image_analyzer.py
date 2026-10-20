@@ -39,6 +39,10 @@ def analyze_civic_image(image_bytes: bytes) -> Dict[str, str]:
     """Use LLaVA to inspect photo and identify civic problem details."""
     if not image_bytes:
         raise ValueError("Image cannot be empty.")
+    if len(image_bytes) > 20 * 1024 * 1024:
+        raise ValueError("Image too large. Maximum size is 20MB.")
+    if len(image_bytes) < 1024:
+        raise ValueError("Image too small or corrupted. Minimum size is 1KB.")
 
     b64_image = resize_image_to_base64(image_bytes)
 
@@ -67,7 +71,9 @@ Answer in 3 concise points:
     elif "wire" in lower or "hazard" in lower or "danger" in lower:
         category = "Public Safety"
 
-    severity = "High" if any(w in lower for w in ["critical", "severe", "urgent", "danger", "deep"]) else "Medium"
+    severity = "High" if any(w in lower for w in ["critical", "severe", "urgent", "danger", "deep", "collapse", "flood", "fire", "exposed wire", "open manhole"]) else "Medium"
+    if any(w in lower for w in ["minor", "cosmetic", "faded", "small crack"]):
+        severity = "Low"
 
     first_line = response_text.split("\n")[0].replace("1.", "").replace("Detected issue:", "").strip()
 
