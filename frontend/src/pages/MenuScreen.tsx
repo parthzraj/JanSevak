@@ -12,12 +12,13 @@ import {
   Sunrise,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { CityBriefingModal } from '../components/feed/DailyBriefingCard';
+import { CityBriefingModal, useCityBriefingAi } from '../components/feed/DailyBriefingCard';
 
 export const MenuScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { badges, user, isBriefingAcknowledged } = useApp();
+  const { badges, user, posts, isBriefingAvailable, isBriefingAcknowledged } = useApp();
   const [showBriefingModal, setShowBriefingModal] = useState(false);
+  const { top3Issues } = useCityBriefingAi(posts);
 
   const unlockedBadgesCount = badges ? badges.filter((b) => b.isUnlocked).length : 4;
 
@@ -105,7 +106,7 @@ export const MenuScreen: React.FC = () => {
       {/* ========================================================= */}
       {/* 1.5. 7:00 AM CITY BRIEFING (VISIBLE ONLY AFTER ACKNOWLEDGED) */}
       {/* ========================================================= */}
-      {isBriefingAcknowledged && (
+      {isBriefingAvailable && isBriefingAcknowledged && (
         <div className="relative overflow-hidden bg-gradient-to-r from-[#07172c] via-[#0f2d59] to-[#1e3a8a] text-white rounded-3xl p-4 shadow-sm border border-[#1d4e8c]/50">
           <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-amber-400/15 rounded-full blur-xl pointer-events-none" />
 
@@ -126,7 +127,9 @@ export const MenuScreen: React.FC = () => {
                   Your 7 AM City Briefing
                 </h3>
                 <p className="text-[11px] text-blue-100/80 mt-0.5 leading-snug line-clamp-1">
-                  Top 3 Priority Redressals of the Day (AI Prioritized)
+                  {top3Issues.length > 0
+                    ? `AI Priority: ${top3Issues[0].title}`
+                    : 'AI-prioritized civic dispatch'}
                 </p>
               </div>
             </div>
@@ -305,4 +308,3 @@ export const MenuScreen: React.FC = () => {
     </div>
   );
 };
-

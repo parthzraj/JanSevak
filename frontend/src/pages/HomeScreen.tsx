@@ -6,7 +6,7 @@ import { FeedPostCard } from '../components/feed/FeedPostCard';
 import { prioritizeFeed } from '../lib/api';
 
 export const HomeScreen: React.FC = () => {
-  const { user, posts, isBriefingAcknowledged } = useApp();
+  const { user, posts, isBriefingAvailable, isBriefingAcknowledged } = useApp();
 
   const [criticalSort, setCriticalSort] = useState(false);
   const [sortedPosts, setSortedPosts] = useState<typeof posts | null>(null);
@@ -83,7 +83,7 @@ export const HomeScreen: React.FC = () => {
       </section>
 
       {/* 7:00 AM City Briefing Clickable Banner (Vanishes on Acknowledge) */}
-      {!isBriefingAcknowledged && <DailyBriefingCard />}
+      {isBriefingAvailable && !isBriefingAcknowledged && <DailyBriefingCard />}
 
       {/* AI Critical Sort Toggle */}
       {posts.length > 1 && (

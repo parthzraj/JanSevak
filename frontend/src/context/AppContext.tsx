@@ -137,6 +137,7 @@ interface AppContextType {
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   toggleTheme: () => void;
+  isBriefingAvailable: boolean;
   isBriefingAcknowledged: boolean;
   acknowledgeBriefing: () => void;
   resetBriefingAcknowledgment: () => void;
@@ -208,32 +209,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [briefing] = useState<DailyBriefing>(INITIAL_BRIEFING);
 
   // Daily Briefing Acknowledged State (per day)
-  const getTodayBriefingKey = () => {
-    const today = new Date();
+  const getBriefingKey = (date: Date = new Date()) => {
+    const today = date;
     return `praja_briefing_ack_${today.getFullYear()}_${today.getMonth() + 1}_${today.getDate()}`;
   };
 
   const [isBriefingAcknowledged, setIsBriefingAcknowledged] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(getTodayBriefingKey()) === 'true';
+      return localStorage.getItem(getBriefingKey()) === 'true';
     } catch {
       return false;
     }
   });
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const refreshBriefingState = () => {
+      const now = new Date();
+      setCurrentTime(now);
+      try {
+        setIsBriefingAcknowledged(localStorage.getItem(getBriefingKey(now)) === 'true');
+      } catch {
+        setIsBriefingAcknowledged(false);
+      }
+    };
+
+    refreshBriefingState();
+    const refreshTimer = window.setInterval(refreshBriefingState, 30_000);
+    return () => window.clearInterval(refreshTimer);
+  }, []);
 
   const acknowledgeBriefing = useCallback(() => {
     try {
-      localStorage.setItem(getTodayBriefingKey(), 'true');
-    } catch {}
+      localStorage.setItem(getBriefingKey(), 'true');
+    } catch {
+      // The in-memory state still keeps the acknowledgement for this session.
+    }
     setIsBriefingAcknowledged(true);
   }, []);
 
   const resetBriefingAcknowledgment = useCallback(() => {
     try {
-      localStorage.removeItem(getTodayBriefingKey());
-    } catch {}
+      localStorage.removeItem(getBriefingKey());
+    } catch {
+      // Keep the in-memory state reset even if storage is unavailable.
+    }
     setIsBriefingAcknowledged(false);
   }, []);
+
+  const isBriefingAvailable = currentTime.getHours() >= 7;
 
   // Reels (safe parse)
   const [reels, setReels] = useState<ReelStory[]>(() => {
@@ -1011,6 +1035,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         theme,
         setTheme,
         toggleTheme,
+        isBriefingAvailable,
         isBriefingAcknowledged,
         acknowledgeBriefing,
         resetBriefingAcknowledgment,
