@@ -1,5 +1,6 @@
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
-const AI_API_BASE_URL = (import.meta.env.VITE_AI_API_URL || 'http://localhost:8001').replace(/\/$/, '');
+const defaultHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+const API_BASE_URL = (import.meta.env.VITE_API_URL || `http://${defaultHost}:8000`).replace(/\/$/, '');
+const AI_API_BASE_URL = (import.meta.env.VITE_AI_API_URL || `http://${defaultHost}:8001`).replace(/\/$/, '');
 
 // ---------------------------------------------------------------------------
 // Auth token (kept in localStorage so a page refresh keeps the user logged in)
