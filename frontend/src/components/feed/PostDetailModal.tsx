@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -26,6 +26,11 @@ import {
   Send,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { timeAgo } from '../../lib/mappers';
+import { ImageLightbox } from './ImageLightbox';
+import { MapViewModal } from './MapViewModal';
+import { DepartmentModal, getDepartmentInfo } from './DepartmentModal';
+import { SupporterAvatar, SupportersModal } from './SupportersModal';
 
 export const PostDetailModal: React.FC = () => {
   const navigate = useNavigate();
@@ -36,6 +41,7 @@ export const PostDetailModal: React.FC = () => {
     setSelectedPostForShare,
     addToast,
     addComment,
+    addEvidence,
     resolveReport,
     user,
   } = useApp();
@@ -43,45 +49,75 @@ export const PostDetailModal: React.FC = () => {
   const [commentInput, setCommentInput] = useState('');
 
   const [showEvidenceUpload, setShowEvidenceUpload] = useState(false);
-  const [evidenceCount, setEvidenceCount] = useState(4);
-  const [evidenceAwarded, setEvidenceAwarded] = useState(false);
+  const [evidenceFiles, setEvidenceFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
+  const [showSupporters, setShowSupporters] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [showMap, setShowMap] = useState(false);
+  const [showDepartment, setShowDepartment] = useState(false);
+
+  // Opening a different report must not inherit the previous one's slide / pop-ups
+  const openPostId = selectedPostForDetail?.id;
+  useEffect(() => {
+    setActiveImageIndex(0);
+    setLightboxIndex(null);
+    setShowMap(false);
+    setShowDepartment(false);
+    setShowSupporters(false);
+    setShowMenu(false);
+    setShowEvidenceUpload(false);
+    setEvidenceFiles((prev) => {
+      prev.forEach((f) => URL.revokeObjectURL(f.preview));
+      return [];
+    });
+  }, [openPostId]);
 
   if (!selectedPostForDetail) return null;
 
   const post = selectedPostForDetail;
 
-  const sampleEvidenceImages = [
-    post.imageUrl,
-    'https://images.unsplash.com/photo-1578991624414-276ef23a534f?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1541888946425-d0fbb186156f?auto=format&fit=crop&w=600&q=80',
-    'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?auto=format&fit=crop&w=600&q=80',
-  ];
+  // Photos the reporter really attached. API posts use `images: []` when there are none;
+  // older offline/mock posts have no `images` field and show their single `imageUrl`.
+  const evidencePhotos: string[] =
+    post.images === undefined ? (post.imageUrl ? [post.imageUrl] : []) : post.images;
+  const hasPhotos = evidencePhotos.length > 0;
+  // The hero always shows something: the real photos, or an illustrative category image
+  const detailImages = hasPhotos ? evidencePhotos : [post.imageUrl];
 
-  const detailImages =
-    post.images && post.images.length > 0
-      ? post.images
-      : [post.imageUrl, ...sampleEvidenceImages.slice(1)];
+  const getDepartment = (category: string) => getDepartmentInfo(category).name;
 
-  const getDepartment = (category: string) => {
-    switch (category) {
-      case 'Roads':
-        return 'Public Works Department (BBMP Road Infra)';
-      case 'Water':
-        return 'Water Supply & Sewerage Board (BWSSB)';
-      case 'Sanitation':
-        return 'Solid Waste Management Cell (SWM)';
-      case 'Streetlights':
-        return 'Electricity Supply Company (BESCOM)';
-      case 'Public Safety':
-        return 'City Police & Traffic Safety Cell';
-      case 'Parks':
-        return 'Horticulture & Public Parks Dept';
-      default:
-        return 'Municipal Ward Engineering Cell';
-    }
+  // ---- Status & timeline built from the real history -----------------------------------
+  const STATUS_STEPS = ['Reported', 'Under Review', 'In Progress', 'Resolved'] as const;
+  const currentStep = Math.max(0, STATUS_STEPS.indexOf(post.status as (typeof STATUS_STEPS)[number]));
+  const formatWhen = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
   };
+  const timelineSteps = STATUS_STEPS.map((step, idx) => {
+    const event = post.timeline?.find((t) => t.status === step);
+    const state: 'done' | 'current' | 'pending' =
+      idx < currentStep || (idx === currentStep && step === 'Resolved')
+        ? 'done'
+        : idx === currentStep
+        ? 'current'
+        : 'pending';
+    let detail: string;
+    if (event) {
+      detail = [formatWhen(event.created_at), event.note && event.note !== 'Issue reported' ? event.note : '']
+        .filter(Boolean)
+        .join(' · ');
+    } else if (step === 'Reported') {
+      detail = [formatWhen(post.timestamp), timeAgo(post.timestamp)].filter(Boolean).join(' · ');
+    } else if (state === 'pending') {
+      detail = 'Pending';
+    } else {
+      detail = state === 'current' ? 'In this stage now' : 'Completed';
+    }
+    return { step, state, detail };
+  });
 
   const getSuggestiveRemarks = (currentPost: typeof post) => {
     if (currentPost.suggestiveRemarks) return currentPost.suggestiveRemarks;
@@ -184,16 +220,55 @@ export const PostDetailModal: React.FC = () => {
   const remarks = getSuggestiveRemarks(post);
 
 
-  const handleAddEvidence = () => {
-    if (!evidenceAwarded) {
-      setEvidenceCount((prev) => prev + 1);
-      setEvidenceAwarded(true);
-      addToast('Evidence Uploaded! +25 Points', 'Citizen verification recorded for this issue.', 'reward');
-    } else {
-      addToast('Evidence Already Added', 'Thank you for verifying this civic issue.', 'info');
-    }
+  // ---- Real photo evidence (uploaded to the server) -------------------------------------
+  const MAX_EVIDENCE_FILES = 3;
+  const MAX_EVIDENCE_MB = 10;
+  const isOwnReport = post.reporter.id === user.id;
+
+  const clearEvidenceFiles = () => {
+    evidenceFiles.forEach((f) => URL.revokeObjectURL(f.preview));
+    setEvidenceFiles([]);
+  };
+
+  const closeEvidenceBox = () => {
+    clearEvidenceFiles();
     setShowEvidenceUpload(false);
   };
+
+  const handlePickEvidence = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = ''; // allow picking the same file again
+    const accepted: { file: File; preview: string }[] = [];
+    for (const file of picked) {
+      if (!file.type.startsWith('image/')) {
+        addToast('Photos only', `"${file.name}" is not an image.`, 'info');
+      } else if (file.size > MAX_EVIDENCE_MB * 1024 * 1024) {
+        addToast('Photo too large', `"${file.name}" is over ${MAX_EVIDENCE_MB} MB.`, 'info');
+      } else {
+        accepted.push({ file, preview: URL.createObjectURL(file) });
+      }
+    }
+    setEvidenceFiles((prev) => {
+      const merged = [...prev, ...accepted];
+      merged.slice(MAX_EVIDENCE_FILES).forEach((f) => URL.revokeObjectURL(f.preview));
+      if (merged.length > MAX_EVIDENCE_FILES) {
+        addToast('Up to 3 photos at a time', undefined, 'info');
+      }
+      return merged.slice(0, MAX_EVIDENCE_FILES);
+    });
+  };
+
+  const handleSubmitEvidence = async () => {
+    if (evidenceFiles.length === 0 || isUploadingEvidence) return;
+    setIsUploadingEvidence(true);
+    const ok = await addEvidence(post.id, evidenceFiles.map((f) => f.file));
+    setIsUploadingEvidence(false);
+    if (ok) closeEvidenceBox();
+  };
+
+  // ---- Community activity (real supporters) ---------------------------------------------
+  const supporters = post.supporters;
+  const supportersTotal = post.supportersTotal ?? post.upvotes;
 
   return (
     <div
@@ -289,7 +364,13 @@ export const PostDetailModal: React.FC = () => {
               style={{ transform: `translateX(-${activeImageIndex * 100}%)` }}
             >
               {detailImages.map((img, idx) => (
-                <div key={idx} className="relative w-full h-full shrink-0 bg-slate-900">
+                <div
+                  key={idx}
+                  className={`relative w-full h-full shrink-0 bg-slate-900 ${hasPhotos ? 'cursor-zoom-in' : ''}`}
+                  onClick={() => hasPhotos && setLightboxIndex(idx)}
+                  role={hasPhotos ? 'button' : undefined}
+                  aria-label={hasPhotos ? `Expand photo ${idx + 1}` : undefined}
+                >
                   <img
                     src={img}
                     alt={`${post.title} - evidence photo ${idx + 1}`}
@@ -367,16 +448,18 @@ export const PostDetailModal: React.FC = () => {
             )}
 
             {/* Bottom Row Overlay: Evidence Images Counter + Slide Pagination Dots */}
-            <div className="absolute bottom-3 inset-x-3 flex items-center justify-between z-10">
+            <div className="absolute bottom-3 inset-x-3 flex items-center justify-between z-10 pointer-events-none">
               <div className="bg-black/60 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 border border-white/20 shadow-xs">
                 <Camera className="w-3.5 h-3.5" />
                 <span>
-                  {activeImageIndex + 1}/{detailImages.length} Evidence Photos
+                  {hasPhotos
+                    ? `${activeImageIndex + 1}/${detailImages.length} Evidence Photos`
+                    : 'Illustrative image · no photo attached'}
                 </span>
               </div>
 
               {detailImages.length > 1 && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/10">
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/10 pointer-events-auto">
                   {detailImages.map((_, idx) => (
                     <button
                       key={idx}
@@ -409,8 +492,8 @@ export const PostDetailModal: React.FC = () => {
                 </span>
                 <span aria-hidden="true">·</span>
                 <span className="flex items-center gap-1 text-[#64748b]">
-                  <Users className="w-3.5 h-3.5 text-[#64748b]" />
-                  2.5 km away
+                  <Clock className="w-3.5 h-3.5 text-[#64748b]" />
+                  {timeAgo(post.timestamp) || post.formattedTime}
                 </span>
               </div>
 
@@ -518,7 +601,7 @@ export const PostDetailModal: React.FC = () => {
               <div className="min-w-0">
                 <span className="text-[10px] text-[#64748b] block">Status</span>
                 <span className="text-xs font-bold text-[#0f172a] truncate block">
-                  Active Issue
+                  {post.status}
                 </span>
               </div>
             </div>
@@ -550,78 +633,79 @@ export const PostDetailModal: React.FC = () => {
             </div>
           </div>
 
-          {/* 6. Evidence Gallery Section */}
+          {/* 6. Evidence Gallery Section (real photos only) */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-[#0f2d59]">Evidence</h3>
-              <button
-                onClick={() => addToast('Opening Evidence Gallery', `${evidenceCount} verified photos on record`, 'info')}
-                className="text-xs font-semibold text-[#0f2d59] flex items-center gap-0.5 hover:underline"
-              >
-                <span>View all ({evidenceCount})</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              {hasPhotos && (
+                <button
+                  type="button"
+                  onClick={() => setLightboxIndex(0)}
+                  className="text-xs font-semibold text-[#0f2d59] flex items-center gap-0.5 hover:underline"
+                >
+                  <span>View all ({evidencePhotos.length})</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
-              {/* Thumbnail 1: Main */}
-              <div className="relative aspect-square rounded-2xl overflow-hidden border border-[#cbd5e1] bg-slate-100 group">
-                <img
-                  src={sampleEvidenceImages[0]}
-                  alt="Main Evidence"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                />
-                <span className="absolute top-1.5 left-1.5 bg-[#0f2d59] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-xs">
-                  <Camera className="w-2.5 h-2.5" /> Main
-                </span>
+            {hasPhotos ? (
+              <div className="grid grid-cols-4 gap-2">
+                {evidencePhotos.slice(0, 4).map((img, idx) => {
+                  const extra = evidencePhotos.length - 4;
+                  const showMore = idx === 3 && extra > 0;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setLightboxIndex(idx)}
+                      className="relative aspect-square rounded-2xl overflow-hidden border border-[#cbd5e1] bg-slate-100 group cursor-zoom-in"
+                      aria-label={showMore ? `View ${extra} more photo${extra > 1 ? 's' : ''}` : `Expand photo ${idx + 1}`}
+                    >
+                      <img
+                        src={img}
+                        alt={`Evidence ${idx + 1}`}
+                        className={`w-full h-full object-cover group-hover:scale-105 transition-transform ${
+                          showMore ? 'opacity-60' : ''
+                        }`}
+                      />
+                      {idx === 0 && (
+                        <span className="absolute top-1.5 left-1.5 bg-[#0f2d59] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-xs">
+                          <Camera className="w-2.5 h-2.5" /> Main
+                        </span>
+                      )}
+                      {showMore && (
+                        <span className="absolute inset-0 flex items-center justify-center bg-slate-900/50 text-white font-extrabold text-sm sm:text-base">
+                          +{extra}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-
-              {/* Thumbnail 2 */}
-              <div className="relative aspect-square rounded-2xl overflow-hidden border border-[#cbd5e1] bg-slate-100 group">
-                <img
-                  src={sampleEvidenceImages[1]}
-                  alt="Evidence 2"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                />
+            ) : (
+              <div className="rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] py-5 text-center">
+                <p className="text-xs font-semibold text-[#0f172a]">No photos were attached to this report.</p>
               </div>
-
-              {/* Thumbnail 3 */}
-              <div className="relative aspect-square rounded-2xl overflow-hidden border border-[#cbd5e1] bg-slate-100 group">
-                <img
-                  src={sampleEvidenceImages[2]}
-                  alt="Evidence 3"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                />
-              </div>
-
-              {/* Thumbnail 4: +1 overlay */}
-              <div
-                onClick={() => setShowEvidenceUpload(true)}
-                className="relative aspect-square rounded-2xl overflow-hidden border border-[#cbd5e1] bg-slate-900 group cursor-pointer"
-              >
-                <img
-                  src={sampleEvidenceImages[3]}
-                  alt="Evidence 4"
-                  className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity"
-                />
-                <div className="absolute inset-0 flex items-center justify-center text-white font-extrabold text-sm sm:text-base">
-                  +1
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* 7. Location Card Strip */}
           <div className="p-3 bg-[#f8fafc] rounded-2xl border border-[#cbd5e1] flex items-center gap-3">
             {/* Map Mini Vector Graphic */}
-            <div className="w-20 h-16 rounded-xl bg-[#E8EFEA] border border-[#CBD9CF] relative overflow-hidden shrink-0 flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => setShowMap(true)}
+              aria-label="View on map"
+              className="w-20 h-16 rounded-xl bg-[#E8EFEA] border border-[#CBD9CF] relative overflow-hidden shrink-0 flex items-center justify-center cursor-pointer"
+            >
               {/* Subtle road grid lines */}
               <div className="absolute inset-x-0 top-3 h-1.5 bg-white/80 rotate-12" />
               <div className="absolute inset-y-0 left-6 w-1.5 bg-white/80 -rotate-12" />
               <div className="w-6 h-6 rounded-full bg-red-100 border border-red-300 flex items-center justify-center relative z-10 shadow-xs animate-bounce">
                 <MapPin className="w-4 h-4 text-red-600 fill-current" />
               </div>
-            </div>
+            </button>
 
             <div className="flex-1 min-w-0">
               <span className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider flex items-center gap-1">
@@ -631,7 +715,8 @@ export const PostDetailModal: React.FC = () => {
                 {post.reporter.wardOrArea}
               </p>
               <button
-                onClick={() => addToast(post.reporter.wardOrArea, 'GPS: 12.9784° N, 77.6408° E', 'info')}
+                type="button"
+                onClick={() => setShowMap(true)}
                 className="text-xs font-bold text-[#0f2d59] flex items-center gap-0.5 hover:underline mt-1"
               >
                 <span>View on Map</span>
@@ -640,85 +725,77 @@ export const PostDetailModal: React.FC = () => {
             </div>
           </div>
 
-          {/* 8. Status & Timeline Section */}
+          {/* 8. Status & Timeline Section (built from the real status history) */}
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-[#0f2d59]">
               Status & Timeline
             </h3>
 
             <div className="space-y-4 pl-1">
-              {/* Step 1: Reported */}
-              <div className="flex items-start gap-3 relative">
-                <div className="w-6 h-6 rounded-full bg-[#0f2d59] text-white flex items-center justify-center text-xs shrink-0 relative z-10">
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                </div>
-                {/* Connecting Line to next step */}
-                <div className="absolute top-6 left-3 -ml-px w-0.5 h-9 bg-[#0f2d59]" />
-
-                <div className="min-w-0 flex-1 -mt-0.5">
-                  <h4 className="text-xs font-bold text-[#0f2d59]">Reported</h4>
-                  <p className="text-[11px] text-[#64748b]">
-                    3 days ago · By{' '}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedPostForDetail(null);
-                        navigate('/profile');
-                      }}
-                      className="font-bold text-[#0f2d59] hover:underline cursor-pointer"
-                      title={`View profile for ${post.reporter.name}`}
+              {timelineSteps.map(({ step, state, detail }, idx) => {
+                const isLast = idx === timelineSteps.length - 1;
+                const nextDone = timelineSteps[idx + 1]?.state !== 'pending';
+                const icon =
+                  step === 'In Progress' ? (
+                    <Wrench className="w-3 h-3" />
+                  ) : step === 'Under Review' ? (
+                    <Clock className="w-3.5 h-3.5" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  );
+                return (
+                  <div key={step} className="flex items-start gap-3 relative">
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs shrink-0 relative z-10 ${
+                        state === 'done'
+                          ? step === 'Resolved'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-[#0f2d59] text-white'
+                          : state === 'current'
+                          ? 'bg-[#F59E0B] text-white shadow-xs ring-4 ring-amber-100'
+                          : 'bg-slate-200 text-slate-500'
+                      }`}
                     >
-                      {post.reporter.name}
-                    </button>
-                  </p>
-                </div>
-              </div>
-
-              {/* Step 2: Under Review */}
-              <div className="flex items-start gap-3 relative">
-                <div className="w-6 h-6 rounded-full bg-[#0284C7] text-white flex items-center justify-center text-xs shrink-0 relative z-10">
-                  <Clock className="w-3.5 h-3.5" />
-                </div>
-                {/* Connecting Line to next step */}
-                <div className="absolute top-6 left-3 -ml-px w-0.5 h-9 bg-[#F59E0B]" />
-
-                <div className="min-w-0 flex-1 -mt-0.5">
-                  <h4 className="text-xs font-bold text-[#0284C7]">Under Review</h4>
-                  <p className="text-[11px] text-[#64748b]">
-                    2 days ago · By Municipal Team
-                  </p>
-                </div>
-              </div>
-
-              {/* Step 3: In Progress */}
-              <div className="flex items-start gap-3 relative">
-                <div className="w-6 h-6 rounded-full bg-[#F59E0B] text-white flex items-center justify-center text-xs shrink-0 relative z-10 shadow-xs ring-4 ring-amber-100">
-                  <Wrench className="w-3 h-3" />
-                </div>
-                {/* Connecting Line to next step */}
-                <div className="absolute top-6 left-3 -ml-px w-0.5 h-9 bg-[#CBD5E1]" />
-
-                <div className="min-w-0 flex-1 -mt-0.5">
-                  <h4 className="text-xs font-bold text-[#D97706]">In Progress</h4>
-                  <p className="text-[11px] text-[#64748b]">
-                    Today · Road repair team assigned
-                  </p>
-                </div>
-              </div>
-
-              {/* Step 4: Resolved */}
-              <div className="flex items-start gap-3 relative">
-                <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-xs shrink-0 relative z-10">
-                  <span className="w-2 h-2 rounded-full bg-slate-400" />
-                </div>
-
-                <div className="min-w-0 flex-1 -mt-0.5">
-                  <h4 className="text-xs font-bold text-slate-600">Resolved</h4>
-                  <p className="text-[11px] text-[#64748b]">
-                    Expected in 5-7 days
-                  </p>
-                </div>
-              </div>
+                      {state === 'pending' ? <span className="w-2 h-2 rounded-full bg-slate-400" /> : icon}
+                    </div>
+                    {!isLast && (
+                      <div
+                        className={`absolute top-6 left-3 -ml-px w-0.5 h-9 ${
+                          state === 'done' && nextDone ? 'bg-[#0f2d59]' : 'bg-[#CBD5E1]'
+                        }`}
+                      />
+                    )}
+                    <div className="min-w-0 flex-1 -mt-0.5">
+                      <h4
+                        className={`text-xs font-bold ${
+                          state === 'pending' ? 'text-slate-500' : state === 'current' ? 'text-[#D97706]' : 'text-[#0f2d59]'
+                        }`}
+                      >
+                        {step}
+                      </h4>
+                      <p className="text-[11px] text-[#64748b]">
+                        {detail}
+                        {step === 'Reported' && (
+                          <>
+                            {' · By '}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedPostForDetail(null);
+                                navigate('/profile');
+                              }}
+                              className="font-bold text-[#0f2d59] hover:underline cursor-pointer"
+                              title={`View profile for ${post.reporter.name}`}
+                            >
+                              {post.reporter.name}
+                            </button>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -739,14 +816,15 @@ export const PostDetailModal: React.FC = () => {
             </div>
 
             <button
-              onClick={() => addToast(getDepartment(post.category), 'Official Ward Handling Desk', 'info')}
+              type="button"
+              onClick={() => setShowDepartment(true)}
               className="text-xs font-bold text-[#0f2d59] px-3 py-1.5 rounded-full border border-[#cbd5e1] hover:bg-[#f8fafc] shrink-0 transition-colors"
             >
               View Details &rarr;
             </button>
           </div>
 
-          {/* 10. Community Activity Card */}
+          {/* 10. Community Activity Card (real supporters from the server) */}
           <div className="p-3.5 bg-white rounded-2xl border border-[#cbd5e1] flex items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-2xl bg-[#eff6ff] text-[#0f2d59] flex items-center justify-center shrink-0">
@@ -757,42 +835,32 @@ export const PostDetailModal: React.FC = () => {
                   Community Activity
                 </span>
                 <p className="text-xs font-bold text-[#0f172a] truncate">
-                  {post.upvotes} people have supported this issue
+                  {post.upvotes === 0
+                    ? 'No one has supported this issue yet'
+                    : `${post.upvotes} ${post.upvotes === 1 ? 'person has' : 'people have'} supported this issue`}
                 </p>
-                {/* Overlapping citizen avatars - Click to view profile */}
-                <div className="flex items-center -space-x-1.5 mt-1">
-                  {[
-                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=128&q=80',
-                    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=128&q=80',
-                    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=128&q=80',
-                    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=128&q=80',
-                  ].map((url, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPostForDetail(null);
-                        navigate('/profile');
-                      }}
-                      className="cursor-pointer hover:scale-110 transition-transform"
-                      title="View supporter profile"
-                    >
-                      <img
-                        src={url}
-                        alt="Supporter"
-                        className="w-5 h-5 rounded-full object-cover border-2 border-white"
-                      />
-                    </button>
-                  ))}
-                  <div className="w-5 h-5 rounded-full bg-[#0f2d59] text-white text-[9px] font-bold flex items-center justify-center border-2 border-white">
-                    +{Math.max(1, post.upvotes - 4)}
+                {supporters && supporters.length > 0 && (
+                  <div className="flex items-center -space-x-1.5 mt-1">
+                    {supporters.slice(0, 4).map((s) => (
+                      <SupporterAvatar key={s.id} supporter={s} />
+                    ))}
+                    {supportersTotal > 4 && (
+                      <div className="w-5 h-5 rounded-full bg-slate-200 text-[#0f2d59] text-[9px] font-bold flex items-center justify-center border-2 border-white">
+                        +{supportersTotal - 4}
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
             <button
-              onClick={() => addToast('Community Endorsements', `${post.upvotes} citizens logged support for this fix`, 'info')}
+              type="button"
+              onClick={() =>
+                supporters
+                  ? setShowSupporters(true)
+                  : addToast('Community Endorsements', `${post.upvotes} citizens logged support for this fix`, 'info')
+              }
               className="text-xs font-bold text-[#0f2d59] px-3 py-1.5 rounded-full border border-[#cbd5e1] hover:bg-[#f8fafc] shrink-0 transition-colors"
             >
               View all &rarr;
@@ -928,15 +996,55 @@ export const PostDetailModal: React.FC = () => {
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-[#0f2d59] hover:bg-[#1d4e8c] text-white text-xs font-bold transition-all shadow-md shadow-[#0f2d59]/20 active:scale-95 shrink-0 cursor-pointer"
           >
             <Camera className="w-4 h-4" />
-            <span>Add Photo (+25 pts)</span>
+            <span>{isOwnReport ? 'Add Photo' : 'Add Photo (+10 pts)'}</span>
           </button>
         </footer>
 
-        {/* Quick Add Evidence Modal */}
+        {lightboxIndex !== null && hasPhotos && (
+          <ImageLightbox
+            images={evidencePhotos}
+            startIndex={lightboxIndex}
+            title={post.title}
+            onClose={() => setLightboxIndex(null)}
+          />
+        )}
+
+        {showSupporters && supporters && (
+          <SupportersModal
+            title={post.title}
+            supporters={supporters}
+            total={supportersTotal}
+            onClose={() => setShowSupporters(false)}
+          />
+        )}
+
+        {showMap && (
+          <MapViewModal
+            title={post.title}
+            address={post.reporter.wardOrArea}
+            latitude={post.latitude}
+            longitude={post.longitude}
+            onClose={() => setShowMap(false)}
+          />
+        )}
+
+        {showDepartment && (
+          <DepartmentModal
+            category={post.category}
+            status={post.status}
+            priority={post.priority}
+            onContact={() =>
+              addToast(`Contacting ${getDepartment(post.category)}`, 'Official ward desk alerted.', 'info')
+            }
+            onClose={() => setShowDepartment(false)}
+          />
+        )}
+
+        {/* Add photo evidence to this report */}
         {showEvidenceUpload && (
           <div
             className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
-            onClick={() => setShowEvidenceUpload(false)}
+            onClick={closeEvidenceBox}
           >
             <div
               className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95"
@@ -945,46 +1053,85 @@ export const PostDetailModal: React.FC = () => {
               <div className="flex items-center justify-between pb-2 border-b border-[#cbd5e1]">
                 <h3 className="text-sm font-bold text-[#0f172a] flex items-center gap-1.5">
                   <Camera className="w-4 h-4 text-[#0f2d59]" />
-                  <span>Verify with Photo Evidence</span>
+                  <span>Add Photo Evidence</span>
                 </h3>
                 <button
-                  onClick={() => setShowEvidenceUpload(false)}
+                  type="button"
+                  onClick={closeEvidenceBox}
                   className="p-1 rounded-full text-[#64748b] hover:text-[#0f172a]"
+                  aria-label="Close"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <p className="text-xs text-[#64748b] leading-relaxed">
-                Take a fresh photo from the site to verify current status. Adding verified photo evidence rewards you <strong>+25 Civic Points</strong>.
+                Add up to {MAX_EVIDENCE_FILES} fresh photos from the site to show the current condition.{' '}
+                {isOwnReport ? (
+                  'You can add photos to your own report, but points are only given for other citizens\' reports.'
+                ) : (
+                  <>
+                    Your first photo contribution to this issue earns <strong>+10 Civic Points</strong>.
+                  </>
+                )}
               </p>
 
-              <label className="border-2 border-dashed border-[#0f2d59]/30 bg-[#f8fafc] rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-[#0f2d59] transition-colors">
-                <Upload className="w-8 h-8 text-[#0f2d59] mb-2" />
-                <span className="text-xs font-bold text-[#0f172a]">Tap to select camera photo</span>
-                <span className="text-[10px] text-[#64748b] mt-0.5">JPG, PNG up to 10MB</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleAddEvidence}
-                  className="hidden"
-                />
-              </label>
+              {evidenceFiles.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {evidenceFiles.map((f, idx) => (
+                    <div key={f.preview} className="relative aspect-square rounded-xl overflow-hidden border border-[#cbd5e1]">
+                      <img src={f.preview} alt={`Selected photo ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          URL.revokeObjectURL(f.preview);
+                          setEvidenceFiles((prev) => prev.filter((x) => x.preview !== f.preview));
+                        }}
+                        className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center"
+                        aria-label={`Remove photo ${idx + 1}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {evidenceFiles.length < MAX_EVIDENCE_FILES && (
+                <label className="border-2 border-dashed border-[#0f2d59]/30 bg-[#f8fafc] rounded-2xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#0f2d59] transition-colors">
+                  <Upload className="w-7 h-7 text-[#0f2d59] mb-1.5" />
+                  <span className="text-xs font-bold text-[#0f172a]">
+                    {evidenceFiles.length === 0 ? 'Tap to take or choose photos' : 'Add another photo'}
+                  </span>
+                  <span className="text-[10px] text-[#64748b] mt-0.5">JPG, PNG, WEBP up to {MAX_EVIDENCE_MB}MB</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    multiple
+                    onChange={handlePickEvidence}
+                    className="hidden"
+                    aria-label="Choose evidence photos"
+                  />
+                </label>
+              )}
 
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowEvidenceUpload(false)}
+                  onClick={closeEvidenceBox}
                   className="flex-1 py-2.5 rounded-xl border border-[#cbd5e1] text-xs font-semibold text-[#64748b]"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  onClick={handleAddEvidence}
-                  className="flex-1 py-2.5 rounded-xl bg-[#0f2d59] text-white text-xs font-bold hover:bg-[#1d4e8c]"
+                  onClick={handleSubmitEvidence}
+                  disabled={evidenceFiles.length === 0 || isUploadingEvidence}
+                  className="flex-1 py-2.5 rounded-xl bg-[#0f2d59] text-white text-xs font-bold hover:bg-[#1d4e8c] disabled:opacity-40"
                 >
-                  Submit Photo (+25 pts)
+                  {isUploadingEvidence
+                    ? 'Uploading...'
+                    : `Submit ${evidenceFiles.length || ''} Photo${evidenceFiles.length === 1 ? '' : 's'}`.replace('  ', ' ')}
                 </button>
               </div>
             </div>

@@ -28,6 +28,7 @@ import {
 } from '../mockData/initialData';
 import {
   ApiError,
+  assetUrl,
   UNAUTHORIZED_EVENT,
   addCommentRequest,
   claimReward,
@@ -36,6 +37,7 @@ import {
   fetchIssues,
   fetchMe,
   fetchNotifications,
+  fetchSupporters,
   getToken,
   loginRequest,
   markAllNotificationsRead,
@@ -45,11 +47,12 @@ import {
   setToken,
   updateIssueStatus,
   updateMe,
+  uploadEvidence,
   uploadImageDataUrl,
   upvoteIssue,
   type BackendTokenResponse,
 } from '../lib/api';
-import { nextLevelPoints, toCivicPost, toComment, toNotification, toUserProfile } from '../lib/mappers';
+import { nextLevelPoints, toCivicPost, toComment, toNotification, toSupporter, toUserProfile } from '../lib/mappers';
 
 interface AppContextType {
   user: UserProfile;
@@ -71,6 +74,8 @@ interface AppContextType {
     longitude?: number;
   }) => Promise<string | null>;
   toggleUpvote: (postId: string) => void;
+  /** Adds 1-3 photos to an existing live report. Resolves true on success. */
+  addEvidence: (postId: string, files: File[]) => Promise<boolean>;
   addComment: (postId: string, text: string) => void;
   toggleBookmark: (postId: string) => void;
   voteInPoll: (postId: string, optionId: string) => void;
@@ -371,10 +376,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const loadComments = async (id: string) => {
     if (!/^\d+$/.test(id)) return; // old mock posts have ids like "post-1234"
     try {
-      const detail = await fetchIssue(id);
+      const [detail, supp] = await Promise.all([
+        fetchIssue(id),
+        fetchSupporters(id).catch(() => null), // the supporters list is a nice-to-have
+      ]);
       const comments = detail.comments.map(toComment);
+      const timeline = detail.timeline;
+      // the reporter's photos followed by photos other citizens added later
+      const images = [...detail.image_urls, ...detail.evidence.map((e) => e.url)].map(assetUrl);
+      const supporters = supp ? supp.items.map(toSupporter) : undefined;
+      const supportersTotal = supp ? supp.total : undefined;
       const patch = (p: CivicPost | null) =>
-        p && p.id === id ? { ...p, comments, commentsCount: comments.length } : p;
+        p && p.id === id
+          ? { ...p, comments, commentsCount: comments.length, timeline, images, supporters, supportersTotal }
+          : p;
       setPosts((prev) => prev.map((p) => (p.id === id ? (patch(p) as CivicPost) : p)));
       setSelectedPostForDetail(patch);
       setSelectedPostForComments(patch);
@@ -532,6 +547,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addToast('Could not update your vote', errText(e), 'info');
     } finally {
       inFlight.current.delete(postId);
+    }
+  };
+
+  const addEvidence = async (postId: string, files: File[]): Promise<boolean> => {
+    if (!/^\d+$/.test(postId)) {
+      addToast('Cannot add photos here', 'Photos can only be added to live reports from the server.', 'info');
+      return false;
+    }
+    try {
+      const res = await uploadEvidence(postId, files);
+      const urls = res.evidence.map((e) => assetUrl(e.url));
+      const add = <T extends CivicPost | null>(p: T): T =>
+        p && p.id === postId ? ({ ...p, images: [...(p.images ?? []), ...urls] } as T) : p;
+      setPosts((prev) => prev.map((p) => add(p)));
+      setSelectedPostForDetail((prev) => add(prev));
+      setSelectedPostForComments((prev) => add(prev));
+      applyPoints(res.user_points, res.user_tier);
+      addToast(
+        res.points_awarded > 0 ? `Photo Added! +${res.points_awarded} Points` : 'Photo Added',
+        res.points_awarded > 0
+          ? 'Thanks for documenting this issue on site.'
+          : 'Thanks for documenting this issue. (No points for your own report or a repeat contribution.)',
+        res.points_awarded > 0 ? 'reward' : 'success'
+      );
+      return true;
+    } catch (e) {
+      addToast('Could not add photos', errText(e), 'info');
+      return false;
     }
   };
 
@@ -802,6 +845,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         posts,
         createReport,
         toggleUpvote,
+        addEvidence,
         addComment,
         toggleBookmark,
         voteInPoll,

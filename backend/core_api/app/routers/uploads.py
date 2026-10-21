@@ -3,53 +3,56 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.security import get_current_user
 from app.models.user import User
+from app.services.image_check import InvalidImage, check_and_clean
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
 _CHUNK = 1024 * 1024
 
 
-def _detect_extension(head: bytes) -> str | None:
-    """Trust the file's magic bytes, not the client-supplied name or content-type."""
-    if head.startswith(b"\xff\xd8\xff"):
-        return ".jpg"
-    if head.startswith(b"\x89PNG\r\n\x1a\n"):
-        return ".png"
-    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
-        return ".webp"
-    if head[:6] in (b"GIF87a", b"GIF89a"):
-        return ".gif"
-    return None
+async def save_image(file: UploadFile, strict: bool = False) -> tuple[str, int, str]:
+    """Read, validate, clean and store one image. Returns (url, size_bytes, perceptual_hash).
 
-
-@router.post("", status_code=status.HTTP_201_CREATED)
-async def upload_image(file: UploadFile = File(...), user: User = Depends(get_current_user)):
+    The upload must be a real, fully decodable image (checked with Pillow, not just the file
+    header). It is re-encoded, so EXIF/GPS data and any hidden extra bytes are dropped.
+    `strict=True` (used for evidence photos) also rejects tiny or blank pictures.
+    Shared by POST /api/uploads and POST /api/issues/{id}/evidence.
+    """
     max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024
     upload_dir = Path(settings.UPLOAD_DIR)
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    first = await file.read(_CHUNK)
-    ext = _detect_extension(first)
-    if ext is None:
-        raise HTTPException(status_code=415, detail="Only JPEG, PNG, WEBP or GIF images are allowed")
+    raw = bytearray()
+    while True:
+        chunk = await file.read(_CHUNK)
+        if not chunk:
+            break
+        raw.extend(chunk)
+        if len(raw) > max_bytes:
+            raise HTTPException(status_code=413, detail=f"Image is larger than {settings.MAX_UPLOAD_MB} MB")
 
-    name = f"{uuid.uuid4().hex}{ext}"
-    path = upload_dir / name
-    size = 0
     try:
-        with open(path, "wb") as out:
-            chunk = first
-            while chunk:
-                size += len(chunk)
-                if size > max_bytes:
-                    raise HTTPException(status_code=413, detail=f"Image is larger than {settings.MAX_UPLOAD_MB} MB")
-                out.write(chunk)
-                chunk = await file.read(_CHUNK)
-    except HTTPException:
-        path.unlink(missing_ok=True)
-        raise
-    return {"url": f"/uploads/{name}", "size_bytes": size}
+        checked = await run_in_threadpool(check_and_clean, bytes(raw), strict)
+    except InvalidImage as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+    name = f"{uuid.uuid4().hex}{checked.extension}"
+    (upload_dir / name).write_bytes(checked.data)
+    return f"/uploads/{name}", len(checked.data), checked.phash
+
+
+def delete_uploaded(url: str) -> None:
+    """Best-effort removal of a stored upload (used when a request fails after saving files)."""
+    if url.startswith("/uploads/"):
+        (Path(settings.UPLOAD_DIR) / Path(url).name).unlink(missing_ok=True)
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def upload_image(file: UploadFile = File(...), user: User = Depends(get_current_user)):
+    url, size, _ = await save_image(file)
+    return {"url": url, "size_bytes": size}

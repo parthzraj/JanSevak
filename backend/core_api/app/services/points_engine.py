@@ -27,6 +27,7 @@ POINTS: dict[str, int] = {
     "report": 20,  # verified report with description + location
     "report_photo": 10,  # photo evidence attached
     "report_location": 5,  # GPS / precise location tagged
+    "evidence": 10,  # photo evidence added to someone else's report
     "upvote": 5,  # site-verification upvote on someone else's report
     "resolve": 50,  # reporter's issue got resolved
     "confirm_resolution": 25,

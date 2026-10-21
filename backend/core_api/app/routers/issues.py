@@ -13,6 +13,7 @@ from app.models.user import User
 from app.schemas.issue import (
     STATUS_ORDER,
     CommentResponse,
+    EvidenceItem,
     IssueCreate,
     IssueCreatedResponse,
     IssueDetailResponse,
@@ -86,6 +87,16 @@ def issue_to_detail(db: Session, issue: CivicIssue, viewer: User | None) -> Issu
         comments=comments,
         timeline=[
             TimelineEntry(status=t.status, note=t.note, created_at=t.created_at) for t in issue.timeline
+        ],
+        evidence=[
+            EvidenceItem(
+                id=e.id,
+                url=e.image_url,
+                user_id=e.user_id,
+                author=e.author.name if e.author else "Unknown",
+                created_at=e.created_at,
+            )
+            for e in issue.evidence
         ],
     )
 

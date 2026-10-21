@@ -224,14 +224,42 @@ def test_notifications(client, make_user):
     assert client.post("/api/notifications/read-all", headers=owner_h).json()["marked_read"] == 1
 
 
+import io
+import itertools
+import random
+
+from PIL import Image
+
+_seed = itertools.count(1)
+
+
+def real_image(fmt="PNG", size=(160, 120), seed=None, flat=False, exif=False):
+    """A genuinely decodable picture; every call gives a visibly different one unless `seed` is repeated."""
+    rnd = random.Random(next(_seed) if seed is None else seed)
+    img = Image.new("RGB", size, (120, 120, 120))
+    if not flat:
+        px = img.load()
+        for x in range(size[0]):
+            for y in range(size[1]):
+                px[x, y] = (rnd.randrange(256), rnd.randrange(256), rnd.randrange(256))
+    out = io.BytesIO()
+    kwargs = {}
+    if exif:
+        e = Image.Exif()
+        e[0x010F] = "SecretPhoneMaker"
+        kwargs["exif"] = e
+    img.save(out, format=fmt, **kwargs)
+    return out.getvalue()
+
+
 def test_upload_image(client, make_user):
     headers, _ = make_user()
-    png = b"\x89PNG\r\n\x1a\n" + b"0" * 100
+    png = real_image("PNG")
     r = client.post("/api/uploads", files={"file": ("a.png", png, "image/png")}, headers=headers)
     assert r.status_code == 201
-    assert client.get(r.json()["url"]).content == png
+    assert client.get(r.json()["url"]).status_code == 200
     bad = client.post("/api/uploads", files={"file": ("a.png", b"not an image", "image/png")}, headers=headers)
-    assert bad.status_code == 415
+    assert bad.status_code == 422
     assert client.post("/api/uploads", files={"file": ("a.png", png, "image/png")}).status_code == 401
     iid = client.post("/api/issues", json={**ISSUE, "image_urls": [r.json()["url"]]}, headers=headers).json()
     assert iid["points_awarded"] == 30 and iid["issue"]["image_urls"] == [r.json()["url"]]  # 20 + 10 photo
@@ -308,3 +336,113 @@ def test_proxy_image_multipart(client, monkeypatch):
 def test_proxy_can_require_login(client, monkeypatch, make_user):
     monkeypatch.setattr(proxy_ai.settings, "AI_PROXY_REQUIRE_AUTH", True)
     assert client.post("/api/ai/chatbot", json={"message": "hi"}).status_code == 401
+
+
+# ---------------------------------------------------------------- evidence photos & supporters
+def _photos(n):
+    return [("files", (f"p{i}.jpg", real_image("JPEG"), "image/jpeg")) for i in range(n)]
+
+
+def test_add_evidence_rewards_once_and_shows_in_detail(client, make_user):
+    owner_h, _ = make_user(email="o@example.com")
+    helper_h, _ = make_user(email="h@example.com", name="Helper")
+    iid = client.post("/api/issues", json=ISSUE, headers=owner_h).json()["issue"]["id"]
+
+    r = client.post(f"/api/issues/{iid}/evidence", files=_photos(2), headers=helper_h)
+    assert r.status_code == 201
+    body = r.json()
+    assert len(body["evidence"]) == 2 and body["points_awarded"] == 10 and body["user_points"] == 10
+    assert client.get(body["evidence"][0]["url"]).status_code == 200  # the file is really stored and served
+
+    again = client.post(f"/api/issues/{iid}/evidence", files=_photos(1), headers=helper_h).json()
+    assert again["points_awarded"] == 0  # one reward per user per issue
+
+    detail = client.get(f"/api/issues/{iid}").json()
+    assert len(detail["evidence"]) == 3 and detail["evidence"][0]["author"] == "Helper"
+    notes = client.get("/api/notifications", headers=owner_h).json()["items"]
+    assert any(n["title"] == "New evidence photo" for n in notes)
+
+
+def test_evidence_rules(client, make_user):
+    owner_h, owner = make_user(email="o@example.com")
+    other_h, _ = make_user(email="h@example.com")
+    iid = client.post("/api/issues", json=ISSUE, headers=owner_h).json()["issue"]["id"]
+    points_before = client.get("/api/auth/me", headers=owner_h).json()["points"]
+
+    # reporter may add photos to their own report but earns nothing (no self-verification)
+    own = client.post(f"/api/issues/{iid}/evidence", files=_photos(1), headers=owner_h).json()
+    assert own["points_awarded"] == 0 and client.get("/api/auth/me", headers=owner_h).json()["points"] == points_before
+
+    assert client.post(f"/api/issues/{iid}/evidence", files=_photos(1)).status_code == 401
+    assert client.post(f"/api/issues/{iid}/evidence", files=_photos(4), headers=other_h).status_code == 400
+    bad = client.post(f"/api/issues/{iid}/evidence", files=[("files", ("x.png", b"not an image", "image/png"))], headers=other_h)
+    assert bad.status_code == 422
+    assert client.post("/api/issues/9999/evidence", files=_photos(1), headers=other_h).status_code == 404
+
+    client.post(f"/api/issues/{iid}/evidence", files=_photos(3), headers=other_h)
+    assert client.post(f"/api/issues/{iid}/evidence", files=_photos(3), headers=other_h).status_code == 409  # max 5 each
+    assert len(client.get(f"/api/issues/{iid}").json()["evidence"]) == 4  # nothing saved by the rejected calls
+
+
+def test_supporters_list(client, make_user):
+    owner_h, _ = make_user(email="o@example.com")
+    a_h, _ = make_user(email="a@example.com", name="Anna A")
+    b_h, _ = make_user(email="b@example.com", name="Bob B")
+    iid = client.post("/api/issues", json=ISSUE, headers=owner_h).json()["issue"]["id"]
+    client.post(f"/api/issues/{iid}/upvote", headers=a_h)
+    client.post(f"/api/issues/{iid}/upvote", headers=b_h)
+
+    s = client.get(f"/api/issues/{iid}/supporters", headers=owner_h).json()
+    assert s["total"] == 2 and {i["name"] for i in s["items"]} == {"Anna A", "Bob B"}
+    assert "email" not in s["items"][0]  # no private data
+    client.delete(f"/api/issues/{iid}/upvote", headers=a_h)
+    assert client.get(f"/api/issues/{iid}/supporters", headers=owner_h).json()["total"] == 1
+    assert client.get(f"/api/issues/{iid}/supporters").status_code == 401
+    assert client.get("/api/issues/9999/supporters", headers=owner_h).status_code == 404
+
+
+def test_image_validation(client, make_user, tmp_path):
+    from app.core.config import settings
+
+    owner_h, _ = make_user(email="o@example.com")
+    h, _ = make_user(email="h@example.com")
+    iid = client.post("/api/issues", json=ISSUE, headers=owner_h).json()["issue"]["id"]
+    url = f"/api/issues/{iid}/evidence"
+
+    def post(data, name="x.jpg"):
+        return client.post(url, files=[("files", (name, data, "image/jpeg"))], headers=h)
+
+    good = real_image("JPEG")
+    # valid header followed by garbage / a truncated file is not an image
+    assert post(good[:20] + b"0" * 300).status_code == 422
+    assert post(good[: len(good) // 2]).status_code == 422
+    assert post(b"\x89PNG\r\n\x1a\n" + b"0" * 100).status_code == 422  # the old "fake PNG" trick
+    assert post(real_image("BMP")).status_code == 415  # real image, but a format we don't accept
+    assert post(real_image("JPEG", flat=True)).status_code == 422  # blank picture
+    assert post(real_image("JPEG", size=(30, 30))).status_code == 422  # too small
+    assert len(client.get(f"/api/issues/{iid}").json()["evidence"]) == 0  # nothing stored for rejects
+
+    # EXIF (phone model / GPS) is stripped from what is stored and served
+    r = post(real_image("JPEG", exif=True, seed=77))
+    assert r.status_code == 201
+    stored = client.get(r.json()["evidence"][0]["url"]).content
+    assert b"SecretPhoneMaker" not in stored and not Image.open(io.BytesIO(stored)).getexif()
+
+    # the same picture can't be used again, even re-saved as a different format, by anyone, on any issue
+    again = post(real_image("PNG", seed=77), name="y.png")
+    assert again.status_code == 409
+    issue2 = client.post("/api/issues", json=ISSUE, headers=owner_h).json()["issue"]["id"]
+    other = client.post(f"/api/issues/{issue2}/evidence", files=[("files", ("z.jpg", real_image("JPEG", seed=77), "image/jpeg"))], headers=h)
+    assert other.status_code == 409
+    # a rejected duplicate earns no points and leaves no stored evidence
+    assert client.get("/api/auth/me", headers=h).json()["points"] == 10
+    assert len(client.get(f"/api/issues/{iid}").json()["evidence"]) == 1
+
+
+def test_oversized_dimensions_are_scaled_down(client, make_user):
+    h, _ = make_user()
+    data = real_image("PNG", size=(3000, 200), seed=5)
+    r = client.post("/api/uploads", files={"file": ("w.png", data, "image/png")}, headers=h)
+    assert r.status_code == 201
+    img = Image.open(io.BytesIO(client.get(r.json()["url"]).content))
+    assert max(img.size) <= 2560

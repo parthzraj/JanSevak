@@ -44,6 +44,12 @@ class CivicIssue(Base):
         cascade="all, delete-orphan",
         order_by="IssueTimelineEvent.id",
     )
+    evidence = relationship(
+        "IssueEvidence",
+        back_populates="issue",
+        cascade="all, delete-orphan",
+        order_by="IssueEvidence.id",
+    )
 
     @property
     def images(self) -> list[str]:
@@ -92,3 +98,19 @@ class IssueTimelineEvent(Base):
     created_at = Column(UTCDateTime, nullable=False, default=utcnow)
 
     issue = relationship("CivicIssue", back_populates="timeline")
+
+
+class IssueEvidence(Base):
+    """A photo added to an existing issue by any citizen (on-site verification)."""
+
+    __tablename__ = "issue_evidence"
+
+    id = Column(Integer, primary_key=True)
+    issue_id = Column(Integer, ForeignKey("civic_issues.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    image_url = Column(String(255), nullable=False)
+    image_hash = Column(String(16), nullable=True, index=True)  # perceptual hash, used to spot re-used photos
+    created_at = Column(UTCDateTime, nullable=False, default=utcnow)
+
+    issue = relationship("CivicIssue", back_populates="evidence")
+    author = relationship("User", lazy="joined")

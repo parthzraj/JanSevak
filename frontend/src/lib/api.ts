@@ -137,9 +137,26 @@ export interface BackendIssue {
   updated_at: string;
 }
 
+export interface BackendEvidence {
+  id: number;
+  url: string;
+  user_id: number;
+  author: string;
+  created_at: string;
+}
+
+export interface BackendSupporter {
+  user_id: number;
+  name: string;
+  avatar_url: string | null;
+  ward: string | null;
+  supported_at: string;
+}
+
 export interface BackendIssueDetail extends BackendIssue {
   comments: BackendComment[];
   timeline: { status: string; note: string | null; created_at: string }[];
+  evidence: BackendEvidence[];
 }
 
 export interface BackendNotification {
@@ -215,6 +232,29 @@ export const removeUpvote = (id: number | string) => request<VoteResult>(`/api/i
 
 export const addCommentRequest = (id: number | string, text: string) =>
   post<BackendComment>(`/api/issues/${id}/comments`, { text });
+
+export const fetchSupporters = (id: number | string) =>
+  request<{ total: number; items: BackendSupporter[] }>(`/api/issues/${id}/supporters?limit=50`);
+
+/** Adds 1-3 on-site photos to an existing issue. */
+export async function uploadEvidence(
+  id: number | string,
+  files: File[]
+): Promise<{ evidence: BackendEvidence[]; points_awarded: number; user_points: number; user_tier: string }> {
+  const form = new FormData();
+  files.forEach((f) => form.append('files', f));
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}/api/issues/${id}/evidence`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form, // the browser sets the multipart Content-Type itself
+  });
+  if (!response.ok) {
+    if (response.status === 401 && token) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    throw await parseError(response);
+  }
+  return response.json();
+}
 
 export const updateIssueStatus = (id: number | string, status: string, note?: string) =>
   request<BackendIssueDetail>(`/api/issues/${id}/status`, {

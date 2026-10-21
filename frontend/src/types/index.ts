@@ -41,6 +41,13 @@ export interface CivicPost {
   imageUrl: string;
   images?: string[];
   imageFallbackGradient: string;
+  latitude?: number;
+  longitude?: number;
+  /** Real status history from the Core API (absent for old offline/mock posts) */
+  timeline?: { status: string; note?: string | null; created_at: string }[];
+  /** Latest citizens who upvoted (live reports only) and the total number of supporters */
+  supporters?: { id: string; name: string; avatar: string; ward?: string; time: string }[];
+  supportersTotal?: number;
   upvotes: number;
   hasUpvoted?: boolean;
   commentsCount: number;

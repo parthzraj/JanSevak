@@ -65,3 +65,20 @@ def create_all_tables() -> None:
     from app import models  # noqa: F401  (registers every table on Base.metadata)
 
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
+
+
+def _add_missing_columns() -> None:
+    """create_all never alters existing tables, so add columns introduced after a DB file was created."""
+    from sqlalchemy import inspect, text
+
+    wanted = {"issue_evidence": [("image_hash", "VARCHAR(16)")]}
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for table, columns in wanted.items():
+            if not inspector.has_table(table):
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            for name, ddl in columns:
+                if name not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))

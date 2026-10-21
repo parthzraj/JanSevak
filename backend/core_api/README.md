@@ -37,6 +37,7 @@ Tests: `python -m pytest -q` (uses a throw-away database, no AI service needed).
 | Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PATCH /auth/me` (`POST /auth/token` is the form login used by Swagger) |
 | Issues | `GET /issues` (`category`, `status`, `priority`, `q`, `sort=recent\|votes`, `page`, `page_size`), `POST /issues`, `GET /issues/{id}`, `PATCH /issues/{id}/status` (official/admin only) |
 | Votes | `POST /issues/{id}/upvote`, `DELETE /issues/{id}/upvote` |
+| Evidence & supporters | `POST /issues/{id}/evidence` (multipart `files`, 1-3 photos, +10 pts once per issue, not on your own report), `GET /issues/{id}/supporters` |
 | Comments | `POST /issues/{id}/comments`, `GET /issues/{id}/comments` |
 | Rewards | `GET /rewards/wallet`, `GET /rewards/history`, `GET /rewards/leaderboard`, `POST /rewards/claim` (quiz / academy only) |
 | Notifications | `GET /notifications`, `PATCH /notifications/{id}/read`, `POST /notifications/read-all` |
@@ -58,6 +59,14 @@ If Developer 1's service is down you get `503 {"detail": "AI inference engine is
 * **No self-verification:** you cannot upvote your own report.
 * Removing an upvote takes back what it paid, once. Vote/unvote cycles cannot farm points.
 * Tiers: Bronze 0-99, Silver 100-299, Gold 300-749, Platinum 750-1999, Legend 2000+.
+
+## Photo checks (`app/services/image_check.py`)
+
+Every upload (report photos and evidence) must fully decode with Pillow, so a valid header followed by
+garbage, or a truncated file, is rejected (422). Accepted images are re-encoded: EXIF/GPS and hidden extra
+bytes are dropped and the stored file is a plain JPEG/PNG (max side 2560 px). Evidence photos are also
+rejected if tiny (<100 px) or blank, and a perceptual hash blocks re-using the same picture (even resized or
+re-saved) on any issue (409). Points are only awarded after all checks pass.
 
 ## Decisions worth knowing about
 
