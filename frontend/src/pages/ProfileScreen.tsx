@@ -18,14 +18,28 @@ import {
   Bell,
   Globe,
   Sliders,
+  Phone,
+  Mail,
+  Home,
+  Plus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Avatar, AVATAR_PRESETS } from '../components/common/Avatar';
+import { saveProfileDetails, useProfileDetails, useWallet } from '../lib/profileApi';
 
 export const ProfileScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, posts, logout, updateUserProfile, changeAvatar, setSelectedPostForDetail, addToast } = useApp();
+  const { user, posts, logout, updateUserProfile, changeAvatar, setSelectedPostForDetail, addToast, refreshData } = useApp();
+  const { details, setDetails } = useProfileDetails();
+  const wallet = useWallet(user.points);
+  const [editPhone, setEditPhone] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editCity, setEditCity] = useState('');
+  const [editPincode, setEditPincode] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'reports' | 'saved'>('reports');
   const [showEditModal, setShowEditModal] = useState(false);
@@ -79,15 +93,59 @@ export const ProfileScreen: React.FC = () => {
 
   const bookmarkedPosts = posts.filter((p) => p.isBookmarked);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateUserProfile({
-      name: editName,
-      neighborhood: editNeighborhood,
-      wardNumber: editWard,
-    });
-    setShowEditModal(false);
+  const openEdit = () => {
+    setEditName(user.name);
+    setEditNeighborhood(user.neighborhood);
+    setEditWard(user.wardNumber);
+    setEditPhone(details?.phone || '');
+    setEditAddress(details?.address || '');
+    setEditCity(details?.city || '');
+    setEditPincode(details?.pincode || '');
+    setEditBio(details?.bio || '');
+    setFormError('');
+    setShowEditModal(true);
   };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setFormError('');
+    try {
+      const ward = [editWard, editNeighborhood].filter(Boolean).join(' - ');
+      const saved = await saveProfileDetails({
+        name: editName,
+        ward,
+        phone: editPhone,
+        address: editAddress,
+        city: editCity,
+        pincode: editPincode,
+        bio: editBio,
+      });
+      setDetails(saved);
+      await refreshData();
+      addToast('Profile Updated', 'Your details are saved.', 'success');
+      setShowEditModal(false);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Could not save your profile.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const detailRows = [
+    { key: 'email', Icon: Mail, label: 'Email', value: details?.email || user.email },
+    { key: 'phone', Icon: Phone, label: 'Mobile', value: details?.phone ? `+91 ${details.phone}` : '' },
+    {
+      key: 'address',
+      Icon: Home,
+      label: 'Address',
+      value: [details?.address, details?.city, details?.pincode].filter(Boolean).join(', '),
+    },
+    { key: 'ward', Icon: MapPin, label: 'Ward', value: `${user.neighborhood}${user.wardNumber ? ` (${user.wardNumber})` : ''}` },
+  ];
+  const completeness = Math.round(
+    ([user.name, details?.phone, details?.address, details?.city, details?.pincode, details?.bio, user.avatar].filter(Boolean).length / 7) * 100
+  );
 
   const handleSaveSettings = () => {
     addToast('Preferences Saved', 'Notification choices updated.', 'success');
@@ -103,7 +161,7 @@ export const ProfileScreen: React.FC = () => {
         </span>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setShowEditModal(true)}
+            onClick={openEdit}
             className="p-2 rounded-full text-[#64748b] hover:text-[#0f172a] hover:bg-[#f8fafc]"
             title="Edit Profile"
           >
@@ -171,6 +229,48 @@ export const ProfileScreen: React.FC = () => {
         </div>
       </div>
 
+      {/* About you: contact details, with a nudge to complete them */}
+      <div className="bg-white rounded-3xl p-4 border border-[#cbd5e1] shadow-xs space-y-3" data-testid="about-you">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-black text-[#0f172a]">About you</h2>
+          <button onClick={openEdit} className="text-xs font-bold text-[#0f2d59] hover:underline cursor-pointer">
+            Edit
+          </button>
+        </div>
+        {completeness < 100 && (
+          <div>
+            <div className="flex items-center justify-between text-[11px] font-semibold text-[#64748b] mb-1">
+              <span>Profile {completeness}% complete</span>
+              <span>Helps officials reach you</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[#e2e8f0] overflow-hidden">
+              <div className="h-full rounded-full bg-[#0f2d59]" style={{ width: `${completeness}%` }} />
+            </div>
+          </div>
+        )}
+        {details?.bio && <p className="text-xs text-[#334155] leading-relaxed">{details.bio}</p>}
+        <ul className="divide-y divide-[#e2e8f0]">
+          {detailRows.map(({ key, Icon, label, value }) => (
+            <li key={key} className="flex items-center gap-3 py-2.5">
+              <span className="w-8 h-8 rounded-xl bg-[#f1f5f9] text-[#0f2d59] flex items-center justify-center shrink-0">
+                <Icon className="w-4 h-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">{label}</p>
+                {value ? (
+                  <p className="text-xs font-semibold text-[#0f172a] break-words">{value}</p>
+                ) : (
+                  <button onClick={openEdit} className="text-xs font-bold text-[#0f2d59] flex items-center gap-1 cursor-pointer">
+                    <Plus className="w-3 h-3" /> Add {label.toLowerCase()}
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p className="text-[10px] text-[#64748b]">Your mobile number and address are private. Other citizens never see them.</p>
+      </div>
+
       {/* Rewards Status Banner */}
       <div
         onClick={() => navigate('/rewards')}
@@ -190,7 +290,7 @@ export const ProfileScreen: React.FC = () => {
               </span>
             </div>
             <p className="text-[11px] text-[#eff6ff] mt-0.5">
-              {user.nextLevelPoints - user.points} points until Gold Champion status
+              {wallet?.next_tier ? `${wallet.points_to_next_tier} points until ${wallet.next_tier}` : wallet ? 'Top level reached' : 'Keep reporting to level up'}
             </p>
           </div>
         </div>
@@ -296,7 +396,7 @@ export const ProfileScreen: React.FC = () => {
           onClick={() => setShowEditModal(false)}
         >
           <div
-            className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl space-y-3"
+            className="w-full max-w-sm max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-5 shadow-2xl space-y-3"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-2 border-b border-[#cbd5e1]">
@@ -385,6 +485,31 @@ export const ProfileScreen: React.FC = () => {
                 />
               </div>
 
+              <div>
+                <label className="text-[11px] font-bold text-[#0f172a] block mb-1">Mobile number</label>
+                <input type="tel" inputMode="numeric" placeholder="10-digit mobile" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="w-full text-xs bg-[#f8fafc] border border-[#cbd5e1] rounded-xl px-3 py-2 text-[#0f172a]" />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-[#0f172a] block mb-1">Address</label>
+                <input type="text" placeholder="House no., street, landmark" maxLength={255} value={editAddress} onChange={(e) => setEditAddress(e.target.value)} className="w-full text-xs bg-[#f8fafc] border border-[#cbd5e1] rounded-xl px-3 py-2 text-[#0f172a]" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-bold text-[#0f172a] block mb-1">City</label>
+                  <input type="text" maxLength={80} value={editCity} onChange={(e) => setEditCity(e.target.value)} className="w-full text-xs bg-[#f8fafc] border border-[#cbd5e1] rounded-xl px-3 py-2 text-[#0f172a]" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-[#0f172a] block mb-1">Pincode</label>
+                  <input type="text" inputMode="numeric" maxLength={6} value={editPincode} onChange={(e) => setEditPincode(e.target.value.replace(/\D/g, ''))} className="w-full text-xs bg-[#f8fafc] border border-[#cbd5e1] rounded-xl px-3 py-2 text-[#0f172a]" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-[#0f172a] block mb-1">About you</label>
+                <textarea rows={2} maxLength={280} placeholder="A line about you and your area" value={editBio} onChange={(e) => setEditBio(e.target.value)} className="w-full text-xs bg-[#f8fafc] border border-[#cbd5e1] rounded-xl px-3 py-2 text-[#0f172a]" />
+              </div>
+
+              {formError && <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-2.5" role="alert">{formError}</p>}
+
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
@@ -395,9 +520,10 @@ export const ProfileScreen: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-[#0f2d59] text-white text-xs font-bold hover:bg-[#1d4e8c]"
+                  disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl bg-[#0f2d59] text-white text-xs font-bold hover:bg-[#1d4e8c] disabled:opacity-60"
                 >
-                  Save Changes
+                  {saving ? 'Saving…' : 'Save Changes'}
                 </button>
               </div>
             </form>
