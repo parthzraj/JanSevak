@@ -15,7 +15,7 @@ import { CivicPost } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { Avatar } from '../common/Avatar';
 import { useProfileLink } from '../../lib/useProfileLink';
-import { googleMapsUrl } from '../../lib/maps';
+import { MapViewModal } from './MapViewModal';
 
 interface FeedPostCardProps {
   post: CivicPost;
@@ -32,6 +32,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({ post }) => {
 
   const openProfile = useProfileLink();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [showMap, setShowMap] = useState(false);
 
   const postImages = post.images && post.images.length > 0 ? post.images : [post.imageUrl];
   const touchStartX = useRef<number | null>(null);
@@ -200,10 +201,10 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({ post }) => {
             <button
               type="button"
               className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md border border-white/30 flex items-center justify-center text-white shadow-sm hover:bg-black/60 transition-colors"
-              title={`Open ${post.reporter.wardOrArea} in Google Maps`}
+              title="View location on map"
               onClick={(e) => {
                 e.stopPropagation();
-                window.open(googleMapsUrl(post), '_blank', 'noopener,noreferrer');
+                setShowMap(true);
               }}
             >
               <MapPin className="w-4 h-4 text-white drop-shadow-xs" />
@@ -339,6 +340,16 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({ post }) => {
           </div>
         )}
       </div>
+
+      {showMap && (
+        <MapViewModal
+          title={post.title}
+          address={post.reporter.wardOrArea}
+          latitude={post.latitude}
+          longitude={post.longitude}
+          onClose={() => setShowMap(false)}
+        />
+      )}
     </article>
   );
 };

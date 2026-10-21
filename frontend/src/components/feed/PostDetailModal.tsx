@@ -1037,6 +1037,9 @@ export const PostDetailModal: React.FC = () => {
         {showResolve && (
           <ResolveModal
             title={post.title}
+            category={post.category}
+            description={post.description}
+            beforePhoto={evidencePhotos[0]}
             onConfirm={(opts) => resolveReport(post.id, opts)}
             onClose={() => setShowResolve(false)}
           />

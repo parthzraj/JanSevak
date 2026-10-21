@@ -51,6 +51,11 @@ export interface BackendReel {
   shares: number;
   has_liked: boolean;
   is_saved: boolean;
+  impact_score?: number;
+  impact_tier?: string;
+  is_verified?: boolean;
+  key_transformation?: string | null;
+  community_takeaway?: string | null;
 }
 
 export interface BackendReelList {
@@ -79,8 +84,10 @@ export interface BackendImpactStats {
   by_category: { category: string; resolved: number }[];
 }
 
-export const getReels = (page = 1, saved = false, pageSize = 10) =>
-  request<BackendReelList>(`/api/impact/reels?page=${page}&page_size=${pageSize}${saved ? '&saved=true' : ''}`);
+export const getReels = (page = 1, saved = false, pageSize = 10, tier?: string) =>
+  request<BackendReelList>(
+    `/api/impact/reels?page=${page}&page_size=${pageSize}${saved ? '&saved=true' : ''}${tier ? `&tier=${encodeURIComponent(tier)}` : ''}`
+  );
 
 export const getReel = (id: number | string) => request<BackendReel>(`/api/impact/reels/${id}`);
 

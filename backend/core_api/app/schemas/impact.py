@@ -29,6 +29,11 @@ class ImpactReel(BaseModel):
     shares: int
     has_liked: bool
     is_saved: bool
+    impact_score: int = 85
+    impact_tier: str = "Transformational"
+    is_verified: bool = True
+    key_transformation: str | None = None
+    community_takeaway: str | None = None
 
 
 class ImpactReelList(BaseModel):

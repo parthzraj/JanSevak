@@ -707,6 +707,59 @@ export async function prioritizeFeed(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Impact Reel Verification (AI)
+// ---------------------------------------------------------------------------
+export interface ImpactVerificationResult {
+  verdict: 'approved' | 'rejected' | 'flagged';
+  is_civic_niche: boolean;
+  is_location_match: boolean;
+  impact_score: number;
+  impact_tier: 'Transformational' | 'Significant' | 'Moderate' | 'Routine / Low';
+  confidence: number;
+  reason: string;
+  rejection_reasons: string[];
+  key_transformation: string;
+  community_takeaway: string;
+  suggested_badges: string[];
+}
+
+export async function verifyImpactReel(input: {
+  beforeImage?: File;
+  afterImage?: File;
+  beforeImageB64?: string;
+  afterImageB64?: string;
+  title: string;
+  category?: string;
+  description?: string;
+  resolutionNote?: string;
+}): Promise<ImpactVerificationResult> {
+  const formData = new FormData();
+  if (input.beforeImage) formData.append('before_image', input.beforeImage);
+  if (input.afterImage) formData.append('after_image', input.afterImage);
+  if (input.beforeImageB64) formData.append('before_image_b64', input.beforeImageB64);
+  if (input.afterImageB64) formData.append('after_image_b64', input.afterImageB64);
+  formData.append('title', input.title || '');
+  if (input.category) formData.append('category', input.category);
+  if (input.description) formData.append('description', input.description);
+  if (input.resolutionNote) formData.append('resolution_note', input.resolutionNote);
+
+  const response = await fetch(`${AI_API_BASE_URL}/api/impact/verify`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let message = `Impact verification failed (${response.status})`;
+    try {
+      const error = (await response.json()) as ApiErrorResponse;
+      if (typeof error.detail === 'string') message = error.detail;
+    } catch { /* ignore */ }
+    throw new Error(message);
+  }
+  return response.json();
+}
+
 
 // Civic drives (campaigns) and NGO volunteering (vacancies)
 // ---------------------------------------------------------------------------
@@ -862,5 +915,6 @@ export default {
   verifyPhoto,
   prepareWithImage,
   prioritizeFeed,
+  verifyImpactReel,
 };
 

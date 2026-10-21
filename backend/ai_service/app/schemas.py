@@ -143,3 +143,17 @@ class StreetRiskResponse(BaseModel):
     predictedHazard: str
     actionRequired: str
 
+
+class ImpactVerifyResponse(BaseModel):
+    verdict: str  # "approved", "rejected", "flagged"
+    is_civic_niche: bool
+    is_location_match: bool
+    impact_score: int
+    impact_tier: str  # "Transformational", "Significant", "Moderate", "Routine / Low"
+    confidence: float
+    reason: str
+    rejection_reasons: List[str] = []
+    key_transformation: str = ""
+    community_takeaway: str = ""
+    suggested_badges: List[str] = []
+
