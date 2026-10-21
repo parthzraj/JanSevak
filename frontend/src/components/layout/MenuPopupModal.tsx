@@ -163,7 +163,7 @@ export const MenuPopupModal: React.FC = () => {
           </button>
         </div>
 
-        {isBriefingAvailable && isBriefingAcknowledged && (
+        {isBriefingAcknowledged && (
           <div className="relative overflow-hidden bg-gradient-to-r from-[#07172c] via-[#0f2d59] to-[#1e3a8a] text-white rounded-3xl p-4 shadow-sm border border-[#1d4e8c]/50">
             <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-amber-400/15 rounded-full blur-xl pointer-events-none" />
 

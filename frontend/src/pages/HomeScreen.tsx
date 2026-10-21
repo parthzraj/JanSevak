@@ -83,7 +83,7 @@ export const HomeScreen: React.FC = () => {
       </section>
 
       {/* 7:00 AM City Briefing Clickable Banner (Vanishes on Acknowledge) */}
-      {isBriefingAvailable && !isBriefingAcknowledged && <DailyBriefingCard />}
+      {!isBriefingAcknowledged && <DailyBriefingCard />}
 
       {/* AI Critical Sort Toggle */}
       {posts.length > 1 && (
