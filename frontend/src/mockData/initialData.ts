@@ -3,15 +3,12 @@ import {
   DailyBriefing,
   ReelStory,
   UserNotification,
-  Vacancy,
-  VolunteerDrive,
   CivicQuiz,
   Badge,
-  LearnModule,
   UserProfile,
   LevelMilestone,
 } from '../types';
-import { DATASET_CIVIC_POSTS, DATASET_VOLUNTEER_DRIVES } from './datasetBridge';
+import { DATASET_CIVIC_POSTS } from './datasetBridge';
 
 export const LEVEL_MILESTONES: LevelMilestone[] = [
   {
@@ -772,7 +769,6 @@ export const INITIAL_POSTS: CivicPost[] = [
   ...DATASET_CIVIC_POSTS,
 ];
 
-export const INITIAL_VOLUNTEER_DRIVES: VolunteerDrive[] = DATASET_VOLUNTEER_DRIVES;
 
 export const INITIAL_REELS: ReelStory[] = [
   {
@@ -1071,81 +1067,6 @@ export const INITIAL_NOTIFICATIONS: UserNotification[] = [
   },
 ];
 
-export const INITIAL_VACANCIES: Vacancy[] = [
-  {
-    id: 'vac-1',
-    role: 'Ward 112 Community Green Warden',
-    organization: 'Hasiru Dala & BBMP Forest Cell',
-    location: 'Indiranagar & Domlur, Bengaluru',
-    type: 'Volunteer',
-    deadline: 'Oct 30, 2026',
-    stipend: 'Certificate & Monthly Travel Allowance',
-    description:
-      'Coordinate quarterly tree health audits, monitor sapling survival rates, and liaise with local apartment associations to build rainwater percolation pits.',
-    requirements: [
-      'Available 4-6 hours on weekends',
-      'Resident of Ward 112 or neighboring wards',
-      'Passionate about urban biodiversity and native flora',
-    ],
-    spotsRemaining: 3,
-    googleFormUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSc_Ward112_GreenWarden/viewform',
-  },
-  {
-    id: 'vac-2',
-    role: 'Youth Civic Data & Mapping Fellow',
-    organization: 'Janaagraha Centre for Citizenship',
-    location: 'Hybrid (Indiranagar Ward Office)',
-    type: 'Fellowship',
-    deadline: 'Nov 10, 2026',
-    stipend: '₹18,000 / month',
-    description:
-      'Assist the Ward Committee in digitizing citizen complaint hotspots, analyzing road quality metrics, and preparing quarterly civic reports for municipal commissioners.',
-    requirements: [
-      'Basic data visualization or spreadsheet skills',
-      'Strong communication in English and Kannada',
-      'College students or recent graduates welcome',
-    ],
-    spotsRemaining: 2,
-    googleFormUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSc_CivicDataFellowship/viewform',
-  },
-  {
-    id: 'vac-3',
-    role: 'Solid Waste Audit Coordinator',
-    organization: 'Swachh Bengaluru Trust',
-    location: 'HAL 2nd Stage & Defense Colony',
-    type: 'Part-time',
-    deadline: 'Nov 05, 2026',
-    stipend: '₹12,000 / month',
-    description:
-      'Conduct monthly source-segregation audits across 120 commercial establishments, distribute green compliance certificates, and train food staff.',
-    requirements: [
-      '10-12 hours per week flexible schedule',
-      'Knowledge of SWM Rules 2016',
-      'Comfortable with door-to-door community interaction',
-    ],
-    spotsRemaining: 4,
-    googleFormUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSc_WasteAuditCoordinator/viewform',
-  },
-  {
-    id: 'vac-4',
-    role: 'Safe Routes to School Volunteer Marshall',
-    organization: 'Citizen Safety Collective',
-    location: 'St. Mary High School Crosswalk',
-    type: 'Volunteer',
-    deadline: 'Open / Rolling',
-    stipend: 'Volunteer Badge + Reflector Kit',
-    description:
-      'Help guide elementary students safely across busy intersections during morning 7:45 AM - 8:30 AM drop-off and afternoon 2:45 PM pick-up.',
-    requirements: [
-      'Punctual and safety-conscious',
-      'Background check verified',
-      'Friendly and approachable attitude',
-    ],
-    spotsRemaining: 5,
-    googleFormUrl: 'https://docs.google.com/forms/d/e/1FAIpQLSc_SchoolSafeRoutesVolunteer/viewform',
-  },
-];
-
 export const INITIAL_QUIZZES: CivicQuiz[] = [
   {
     id: 'quiz-1',
@@ -1346,68 +1267,5 @@ export const INITIAL_BADGES: Badge[] = [
     isUnlocked: false,
     progress: 65, // 20 of 30 days
     category: 'Monitoring',
-  },
-];
-
-export const INITIAL_MODULES: LearnModule[] = [
-  {
-    id: 'mod-1',
-    title: 'Solid Waste Management & Citizen Responsibility',
-    duration: '15 mins',
-    level: 'Beginner',
-    lessonsCount: 3,
-    progress: 100,
-    description: 'Master the 2-Bin-1-Bag framework, safe domestic hazardous handling, and home composting principles.',
-    keyTakeaways: [
-      'Segregation at source is mandatory by law',
-      'Dry waste recycling centers turn waste into livelihoods',
-      'Home composting eliminates 60% of household landfill footprint',
-    ],
-    certified: true,
-  },
-  {
-    id: 'mod-2',
-    title: 'Urban Rainwater Harvesting & Groundwater Recharge',
-    duration: '20 mins',
-    level: 'Intermediate',
-    lessonsCount: 4,
-    progress: 75,
-    description: 'Design rooftop catchment filters, calculate recharge potential, and maintain percolation wells.',
-    keyTakeaways: [
-      'A 1000 sq ft roof can harvest over 100,000 liters annually in Bengaluru',
-      'First-flush diverters prevent dust and bird droppings from entering sumps',
-      'Recharge wells revitalize community shallow aquifers',
-    ],
-    certified: false,
-  },
-  {
-    id: 'mod-3',
-    title: 'Navigating Local Ward Committees & RTI Filings',
-    duration: '25 mins',
-    level: 'Intermediate',
-    lessonsCount: 5,
-    progress: 40,
-    description: 'How to participate in constitutionally mandated Ward Committee meetings and file effective RTI queries.',
-    keyTakeaways: [
-      'Ward budget allocations are public documents',
-      'RTI filing process step-by-step',
-      'Drafting actionable civic petitions',
-    ],
-    certified: false,
-  },
-  {
-    id: 'mod-4',
-    title: 'Pedestrian Safety & Non-Motorized Transport (NMT)',
-    duration: '18 mins',
-    level: 'Beginner',
-    lessonsCount: 3,
-    progress: 0,
-    description: 'Understanding tender SURE footpath standards, traffic calming designs, and elder accessibility.',
-    keyTakeaways: [
-      'Continuous grade footpaths protect wheelchair users and strollers',
-      'Raised tabletop pedestrian crossings reduce vehicular speeds by 40%',
-      'Reporting unbolted utility chambers prevents serious injuries',
-    ],
-    certified: false,
   },
 ];

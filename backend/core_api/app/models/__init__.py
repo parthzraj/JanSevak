@@ -1,3 +1,4 @@
+from app.models.academy import Course, Enrollment, Lesson, LessonProgress
 from app.models.contest import Contest, ContestEntry
 from app.models.issue import CivicIssue, IssueComment, IssueEvidence, IssueTimelineEvent, IssueVote
 from app.models.notification import Notification
@@ -22,4 +23,8 @@ __all__ = [
     "VacancyApplication",
     "Campaign",
     "CampaignMember",
+    "Course",
+    "Lesson",
+    "Enrollment",
+    "LessonProgress",
 ]

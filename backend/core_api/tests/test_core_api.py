@@ -194,8 +194,8 @@ def test_quiz_claim_rejects_quiz_type_and_validates(client, make_user):
     headers, _ = make_user()
     # quizzes are graded server-side now, so they can no longer be claimed directly
     assert client.post("/api/rewards/claim", json={"action_type": "quiz", "action_id": "quiz-1", "points": 25}, headers=headers).status_code == 400
-    ok = client.post("/api/rewards/claim", json={"action_type": "academy_module", "action_id": "m1", "points": 30}, headers=headers).json()
-    assert ok["awarded"] == 30
+    # academy courses are verified by the server and the NGO now, so they cannot be claimed either
+    assert client.post("/api/rewards/claim", json={"action_type": "academy_module", "action_id": "m1", "points": 30}, headers=headers).status_code == 400
     assert client.post("/api/rewards/claim", json={"action_type": "cleanup", "action_id": "x", "points": 40}, headers=headers).status_code == 400
 
 
@@ -1038,3 +1038,278 @@ def test_closed_vacancy_rejects_applications(client, make_user):
     assert client.post(f"/api/vacancies/{vid}/apply", json={}, headers=cit).status_code == 409
     assert client.get("/api/vacancies").json()["total"] == 0
     assert client.get("/api/vacancies?include_closed=true").json()["total"] == 1
+
+
+
+# ---------------------------------------------------------------- Civic Academy
+READING_TEXT = "Rainwater that is collected from a roof can be stored or sent down to recharge the groundwater under a plot. " * 3
+
+
+def _course(**kw):
+    body = {
+        "title": "Rainwater harvesting basics",
+        "summary": "How a roof becomes a water source.",
+        "description": "A short course on collecting and using rainwater at home, with two real tasks.",
+        "level": "Beginner",
+        "category": "Water",
+        "publish": True,
+        "lessons": [
+            {"kind": "video", "title": "Why harvest rain", "summary": "A short introduction video.", "video_url": "https://youtu.be/dQw4w9WgXcQ", "duration_seconds": 20},
+            {"kind": "reading", "title": "The four parts", "summary": "Catchment, carry, filter, store.", "body": READING_TEXT},
+            {"kind": "task", "title": "Photograph your roof", "summary": "Show your catchment.", "task_mode": "physical", "proof_type": "photo",
+             "instructions": "Take one clear photo of the roof together with its downpipe."},
+            {"kind": "task", "title": "Work out your yield", "summary": "Use the formula.", "task_mode": "online", "proof_type": "text",
+             "instructions": "Write your roof area, apply the formula and give the litres per year."},
+        ],
+    }
+    body.update(kw)
+    return body
+
+
+class _Clock:
+    def __init__(self):
+        from datetime import datetime, timezone
+        self.t = datetime.now(timezone.utc)
+
+    def __call__(self):
+        return self.t
+
+    def advance(self, seconds):
+        from datetime import timedelta
+        self.t += timedelta(seconds=seconds)
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    c = _Clock()
+    monkeypatch.setattr("app.routers.academy.utcnow", c)
+    return c
+
+
+def _lesson_ids(client, cid, headers=None):
+    return [l["id"] for l in client.get(f"/api/academy/courses/{cid}", headers=headers or {}).json()["lessons"]]
+
+
+def test_course_authoring_rules(client, make_user):
+    ngo_h = _ngo(client)
+    cit, _ = make_user(email="c@example.com")
+    assert client.post("/api/academy/courses", json=_course(), headers=cit).status_code == 403  # only NGOs author
+    bad_video = _course(lessons=[{"kind": "video", "title": "No length", "summary": "A video lesson.", "video_url": "https://youtu.be/dQw4w9WgXcQ"}])
+    assert client.post("/api/academy/courses", json=bad_video, headers=ngo_h).status_code == 422
+    not_video = _course(lessons=[{"kind": "video", "title": "Wrong site", "summary": "A video lesson.", "video_url": "https://example.com/page", "duration_seconds": 60}])
+    assert client.post("/api/academy/courses", json=not_video, headers=ngo_h).status_code == 422
+    short_task = _course(lessons=[{"kind": "task", "title": "Vague task", "summary": "Do something useful.", "task_mode": "online", "proof_type": "text", "instructions": "Do it"}])
+    assert client.post("/api/academy/courses", json=short_task, headers=ngo_h).status_code == 422
+    one = _course(lessons=_course()["lessons"][:1])
+    assert client.post("/api/academy/courses", json=one, headers=ngo_h).status_code == 422  # publish needs 2+ lessons / 5+ minutes
+
+    draft = client.post("/api/academy/courses", json=_course(publish=False), headers=ngo_h).json()
+    assert draft["status"] == "Draft" and draft["lessons_count"] == 4 and draft["task_count"] == 2 and draft["points"] == 60
+    assert client.get("/api/academy/courses").json()["total"] == 0  # drafts are private
+    assert client.get(f"/api/academy/courses/{draft['id']}").status_code == 404
+    assert client.get(f"/api/academy/courses/{draft['id']}", headers=ngo_h).status_code == 200
+    assert client.post(f"/api/academy/courses/{draft['id']}/enroll", headers=cit).status_code == 404
+
+    other = client.post("/api/auth/register", json={"name": "Other Trust", "email": "o3@x.org", "password": "secret1", "account_type": "ngo", "ngo_code": "ngo-secret"}).json()
+    other_h = {"Authorization": f"Bearer {other['access_token']}"}
+    assert client.post(f"/api/academy/courses/{draft['id']}/publish", headers=other_h).status_code == 403
+    assert client.post(f"/api/academy/courses/{draft['id']}/publish", headers=ngo_h).json()["status"] == "Published"
+    assert client.get("/api/academy/courses").json()["total"] == 1
+
+    # public outline shows tasks clearly but hides the lesson content until you enroll
+    pub = client.get(f"/api/academy/courses/{draft['id']}").json()
+    assert pub["lessons"][0]["video_ref"] is None and pub["lessons"][1]["body"] is None
+    assert "photo of the roof" in pub["lessons"][2]["instructions"] and pub["lessons"][2]["task_mode"] == "physical"
+
+    assert client.post(f"/api/academy/courses/{draft['id']}/enroll", headers=ngo_h).status_code == 403  # NGOs do not take courses
+    assert client.post(f"/api/academy/courses/{draft['id']}/enroll", headers=cit).status_code == 201
+    assert client.post(f"/api/academy/courses/{draft['id']}/enroll", headers=cit).status_code == 409
+    assert client.patch(f"/api/academy/courses/{draft['id']}", json={"lessons": _course()["lessons"]}, headers=ngo_h).status_code == 409  # locked
+    assert client.patch(f"/api/academy/courses/{draft['id']}", json={"title": "Rainwater harvesting, updated"}, headers=ngo_h).status_code == 200
+    assert client.delete(f"/api/academy/courses/{draft['id']}", headers=ngo_h).status_code == 409
+
+
+def test_video_cannot_be_skipped_and_lessons_are_sequential(client, make_user, clock):
+    ngo_h = _ngo(client)
+    cit, _ = make_user(email="c@example.com")
+    cid = client.post("/api/academy/courses", json=_course(), headers=ngo_h).json()["id"]
+    v, r, t1, t2 = _lesson_ids(client, cid, ngo_h)
+    base = f"/api/academy/courses/{cid}/lessons"
+    assert client.post(f"{base}/{v}/open", headers=cit).status_code == 403  # not enrolled
+    client.post(f"/api/academy/courses/{cid}/enroll", headers=cit)
+
+    assert client.post(f"{base}/{r}/open", headers=cit).status_code == 409  # lesson 2 is locked
+    opened = client.post(f"{base}/{v}/open", headers=cit).json()
+    assert opened["lesson"]["video_kind"] == "youtube" and opened["lesson"]["video_ref"] == "dQw4w9WgXcQ"
+    assert opened["lesson"]["required_seconds"] == 18 and opened["enrollment"]["percent"] == 0
+    beat = lambda pos: client.post(f"{base}/{v}/heartbeat", json={"position": pos}, headers=cit).json()["lesson"]["watched_seconds"]
+    done = lambda: client.post(f"{base}/{v}/complete", headers=cit)
+
+    assert beat(0) == 0  # first beat of a viewing only starts the clock
+    assert done().status_code == 409  # nothing watched
+    clock.advance(5)
+    assert beat(5) == 5  # five real seconds of playback
+    clock.advance(5)
+    assert beat(2) == 5  # rewinding earns nothing...
+    clock.advance(5)
+    assert beat(7) == 7  # ...and the budget is time-based, so a late or jittery beat loses nothing
+    clock.advance(5)
+    assert beat(2) == 7  # rewatching old ground earns nothing new
+    clock.advance(5)
+    assert beat(7) == 7
+    assert done().status_code == 409
+    for pos in (12, 17):  # honest playback carries on from second 7
+        clock.advance(5)
+        beat(pos)
+    assert done().status_code == 409  # 17 of the 18 required seconds
+    clock.advance(5)
+    assert beat(20) == 20
+    finished = done()
+    assert finished.status_code == 200 and finished.json()["lesson"]["state"] == "done"
+    assert finished.json()["enrollment"]["percent"] == 25
+    assert client.post(f"{base}/{r}/open", headers=cit).status_code == 200  # next lesson unlocked
+
+
+def test_skipping_ahead_earns_only_real_time(client, make_user, clock):
+    ngo_h = _ngo(client)
+    cit, _ = make_user(email="c@example.com")
+    cid = client.post("/api/academy/courses", json=_course(), headers=ngo_h).json()["id"]
+    v = _lesson_ids(client, cid, ngo_h)[0]
+    client.post(f"/api/academy/courses/{cid}/enroll", headers=cit)
+    base = f"/api/academy/courses/{cid}/lessons/{v}"
+    client.post(f"{base}/open", headers=cit)
+    beat = lambda pos: client.post(f"{base}/heartbeat", json={"position": pos}, headers=cit).json()["lesson"]["watched_seconds"]
+    beat(0)
+    clock.advance(3)
+    assert beat(20) <= 5  # jumped to the end after 3 real seconds: at most those seconds (plus slack) count
+    for _ in range(10):  # a burst of beats earns nothing extra
+        assert beat(20) <= 5
+    assert client.post(f"{base}/complete", headers=cit).status_code == 409
+    # beats for a lesson that is not a video, or from someone not enrolled, are refused
+    other, _ = make_user(email="d@example.com")
+    assert client.post(f"{base}/heartbeat", json={"position": 1}, headers=other).status_code == 403
+
+
+def test_reading_needs_time_on_page(client, make_user, clock):
+    ngo_h = _ngo(client)
+    cit, _ = make_user(email="c@example.com")
+    cid = client.post("/api/academy/courses", json=_course(lessons=[
+        {"kind": "reading", "title": "Read me", "summary": "A reading lesson.", "body": READING_TEXT * 12},
+        {"kind": "reading", "title": "Read me too", "summary": "Another reading lesson.", "body": READING_TEXT * 12},
+    ]), headers=ngo_h).json()["id"]
+    r1, r2 = _lesson_ids(client, cid, ngo_h)
+    client.post(f"/api/academy/courses/{cid}/enroll", headers=cit)
+    base = f"/api/academy/courses/{cid}/lessons"
+    opened = client.post(f"{base}/{r1}/open", headers=cit).json()["lesson"]
+    need = opened["required_seconds"]
+    assert need >= 10 and opened["body"]
+    assert client.post(f"{base}/{r1}/complete", headers=cit).status_code == 409
+    clock.advance(need - 1)
+    assert client.post(f"{base}/{r1}/complete", headers=cit).status_code == 409
+    clock.advance(2)
+    assert client.post(f"{base}/{r1}/complete", headers=cit).status_code == 200
+    # closing and reopening restarts the clock on the next reading lesson
+    client.post(f"{base}/{r2}/open", headers=cit)
+    assert client.post(f"{base}/{r2}/complete", headers=cit).status_code == 409
+
+
+def _finish_video_and_reading(client, cit, cid, clock):
+    v, r, *_ = _lesson_ids(client, cid, cit)
+    base = f"/api/academy/courses/{cid}/lessons"
+    client.post(f"{base}/{v}/open", headers=cit)
+    client.post(f"{base}/{v}/heartbeat", json={"position": 0}, headers=cit)
+    for pos in (5, 10, 15, 20):
+        clock.advance(5)
+        client.post(f"{base}/{v}/heartbeat", json={"position": pos}, headers=cit)
+    assert client.post(f"{base}/{v}/complete", headers=cit).status_code == 200
+    client.post(f"{base}/{r}/open", headers=cit)
+    clock.advance(60)
+    assert client.post(f"{base}/{r}/complete", headers=cit).status_code == 200
+
+
+def test_tasks_need_ngo_approval_then_certificate_and_points(client, make_user, clock):
+    ngo_h = _ngo(client)
+    other = client.post("/api/auth/register", json={"name": "Other Trust", "email": "o4@x.org", "password": "secret1", "account_type": "ngo", "ngo_code": "ngo-secret"}).json()
+    other_h = {"Authorization": f"Bearer {other['access_token']}"}
+    cit, _ = make_user(email="c@example.com")
+    cid = client.post("/api/academy/courses", json=_course(), headers=ngo_h).json()["id"]
+    _, _, t1, t2 = _lesson_ids(client, cid, ngo_h)
+    client.post(f"/api/academy/courses/{cid}/enroll", headers=cit)
+    base = f"/api/academy/courses/{cid}/lessons"
+    _finish_video_and_reading(client, cit, cid, clock)
+
+    assert client.post(f"{base}/{t2}/open", headers=cit).status_code == 409  # task 2 is locked behind task 1
+    assert client.post(f"{base}/{t1}/open", headers=cit).status_code == 200
+    assert client.post(f"{base}/{t1}/submit", json={}, headers=cit).status_code == 422  # photo required
+    assert client.post(f"{base}/{t1}/submit", json={"proof_url": "/uploads/nope.png"}, headers=cit).status_code == 422  # must be a real upload
+    assert client.post(f"{base}/{t1}/complete", headers=cit).status_code == 400  # tasks are never self-completed
+    sub = client.post(f"{base}/{t1}/submit", json={"proof_url": _upload(client, cit)}, headers=cit).json()
+    assert sub["lesson"]["state"] == "submitted" and sub["enrollment"]["percent"] < 100
+    assert client.post(f"{base}/{t1}/submit", json={"proof_url": _upload(client, cit)}, headers=cit).status_code == 409  # waiting for review
+
+    queue = client.get("/api/academy/submissions", headers=ngo_h).json()
+    assert len(queue) == 1 and queue[0]["learner"]["name"] and queue[0]["proof_url"].startswith("/uploads/")
+    assert client.get("/api/academy/submissions", headers=cit).status_code == 403
+    assert client.get("/api/academy/submissions", headers=other_h).json() == []  # another NGO sees nothing
+    pid = queue[0]["id"]
+    assert client.patch(f"/api/academy/submissions/{pid}", json={"decision": "approve"}, headers=other_h).status_code == 403
+    assert client.patch(f"/api/academy/submissions/{pid}", json={"decision": "reject"}, headers=ngo_h).status_code == 422  # a reason is required
+    rej = client.patch(f"/api/academy/submissions/{pid}", json={"decision": "reject", "feedback": "The downpipe is not visible"}, headers=ngo_h)
+    assert rej.status_code == 200 and rej.json()["item"]["status"] == "rejected"
+    mine = client.get(f"/api/academy/courses/{cid}", headers=cit).json()["lessons"][2]
+    assert mine["state"] == "rejected" and mine["feedback"] == "The downpipe is not visible"
+
+    assert client.post(f"{base}/{t1}/submit", json={"proof_url": _upload(client, cit)}, headers=cit).json()["lesson"]["attempts"] == 2
+    assert client.patch(f"/api/academy/submissions/{pid}", json={"decision": "approve"}, headers=ngo_h).status_code == 200
+    assert client.patch(f"/api/academy/submissions/{pid}", json={"decision": "approve"}, headers=ngo_h).status_code == 409  # already reviewed
+
+    assert client.get("/api/auth/me", headers=cit).json()["points"] == 0  # no points before the course is finished
+    assert client.get("/api/academy/certificates/mine", headers=cit).json() == []
+    assert client.post(f"{base}/{t2}/open", headers=cit).status_code == 200
+    assert client.post(f"{base}/{t2}/submit", json={"proof_text": "too short"}, headers=cit).status_code == 422
+    client.post(f"{base}/{t2}/submit", json={"proof_text": "My roof is 93 square metres so it yields about 70,000 litres a year."}, headers=cit)
+    pid2 = client.get("/api/academy/submissions", headers=ngo_h).json()[0]["id"]
+    result = client.patch(f"/api/academy/submissions/{pid2}", json={"decision": "approve"}, headers=ngo_h).json()
+    assert result["course_completed"] is True
+
+    assert client.get("/api/auth/me", headers=cit).json()["points"] == 60
+    detail = client.get(f"/api/academy/courses/{cid}", headers=cit).json()
+    assert detail["my"]["completed"] is True and detail["my"]["percent"] == 100 and detail["my"]["points_awarded"] == 60
+    certs = client.get("/api/academy/certificates/mine", headers=cit).json()
+    assert len(certs) == 1 and certs[0]["course_title"] == "Rainwater harvesting basics" and certs[0]["tasks_verified"] == 2
+    code = certs[0]["code"]
+    assert code.startswith("JS-")
+    public = client.get(f"/api/academy/certificates/{code.lower()}")  # no login needed, case-insensitive
+    assert public.status_code == 200 and public.json()["issuer"]["is_ngo"] is True
+    assert client.get("/api/academy/certificates/JS-000-0000-ZZZZ").status_code == 404
+    assert any(t["action_type"] == "course_complete" for t in client.get("/api/rewards/history", headers=cit).json()["items"])
+
+
+def test_weekly_course_point_limit_and_archive(client, make_user, clock):
+    ngo_h = _ngo(client)
+    cit, _ = make_user(email="c@example.com")
+    two_readings = lambda n: _course(title=f"Reading course {n}", lessons=[
+        {"kind": "reading", "title": "Part one", "summary": "The first reading.", "body": READING_TEXT * 12},
+        {"kind": "reading", "title": "Part two", "summary": "The second reading.", "body": READING_TEXT * 12},
+    ])
+    ids = [client.post("/api/academy/courses", json=two_readings(n), headers=ngo_h).json()["id"] for n in range(3)]
+    awarded = []
+    for cid in ids:
+        client.post(f"/api/academy/courses/{cid}/enroll", headers=cit)
+        for lid in _lesson_ids(client, cid, cit):
+            client.post(f"/api/academy/courses/{cid}/lessons/{lid}/open", headers=cit)
+            clock.advance(120)
+            assert client.post(f"/api/academy/courses/{cid}/lessons/{lid}/complete", headers=cit).status_code == 200
+        my = client.get(f"/api/academy/courses/{cid}", headers=cit).json()["my"]
+        assert my["completed"] and my["certificate_code"]  # a certificate is always issued
+        awarded.append(my["points_awarded"])
+    assert awarded == [60, 60, 0]  # but only two courses a week pay points
+    assert client.get("/api/auth/me", headers=cit).json()["points"] == 120
+
+    assert client.post(f"/api/academy/courses/{ids[0]}/archive", headers=ngo_h).json()["status"] == "Archived"
+    assert client.get("/api/academy/courses").json()["total"] == 2
+    assert client.get(f"/api/academy/courses/{ids[0]}").status_code == 404  # strangers can no longer open it
+    assert client.get(f"/api/academy/courses/{ids[0]}", headers=cit).status_code == 200  # learners keep their course
+    assert client.get("/api/academy/courses?enrolled=true", headers=cit).json()["total"] == 3
+    assert client.get("/api/academy/courses?mine=true", headers=ngo_h).json()["total"] == 3
+    assert client.get("/api/academy/courses?enrolled=true").status_code == 401

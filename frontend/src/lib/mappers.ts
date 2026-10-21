@@ -160,6 +160,8 @@ const NOTIFICATION_TYPES: Record<string, UserNotification['type']> = {
   reward: 'reward',
   status: 'report_update',
   comment: 'report_update',
+  event: 'event',
+  vacancy: 'vacancy',
 };
 
 export function toNotification(n: BackendNotification): UserNotification {

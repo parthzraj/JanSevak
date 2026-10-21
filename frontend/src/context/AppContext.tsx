@@ -4,10 +4,7 @@ import {
   DailyBriefing,
   ReelStory,
   UserNotification,
-  Vacancy,
-  VolunteerDrive,
   Badge,
-  LearnModule,
   UserProfile,
   ToastMessage,
   CivicCategory,
@@ -19,17 +16,13 @@ import {
   INITIAL_POSTS,
   INITIAL_REELS,
   INITIAL_NOTIFICATIONS,
-  INITIAL_VACANCIES,
-  INITIAL_VOLUNTEER_DRIVES,
   INITIAL_BADGES,
-  INITIAL_MODULES,
 } from '../mockData/initialData';
 import {
   ApiError,
   assetUrl,
   UNAUTHORIZED_EVENT,
   addCommentRequest,
-  claimReward,
   createIssueRequest,
   deleteIssueRequest,
   fetchIssue,
@@ -94,17 +87,11 @@ interface AppContextType {
   unreadNotificationsCount: number;
   markAllNotificationsAsRead: () => void;
   markNotificationAsRead: (id: string) => void;
-  vacancies: Vacancy[];
-  appliedVacancies: string[];
-  applyVacancy: (vacancyId: string, applicantNote?: string) => void;
-  volunteerDrives: VolunteerDrive[];
-  joinVolunteerDrive: (driveId: string) => void;
-  submitVolunteerProof: (driveId: string, photoDataUrl: string, note: string) => void;
+  /** Re-reads the signed-in user (points), the feed and notifications from the server. */
+  refreshData: () => Promise<void>;
   /** Apply a points/tier total that the server just returned (e.g. after a quiz). */
   syncPoints: (points: number, tier: string) => void;
   badges: Badge[];
-  modules: LearnModule[];
-  completeModuleLesson: (moduleId: string) => void;
   toasts: ToastMessage[];
   addToast: (title: string, description?: string, type?: 'success' | 'info' | 'reward') => void;
   removeToast: (id: string) => void;
@@ -279,33 +266,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  // Vacancies
-  const [vacancies] = useState<Vacancy[]>(INITIAL_VACANCIES);
-  const [appliedVacancies, setAppliedVacancies] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('prajapulse_applied_vacancies');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // NGO Volunteer Drives (Dataset integrated)
-  const [volunteerDrives, setVolunteerDrives] = useState<VolunteerDrive[]>(() => {
-    try {
-      const saved = localStorage.getItem('prajapulse_volunteer_drives');
-      return saved ? JSON.parse(saved) : INITIAL_VOLUNTEER_DRIVES;
-    } catch {
-      return INITIAL_VOLUNTEER_DRIVES;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('prajapulse_volunteer_drives', JSON.stringify(volunteerDrives));
-    } catch {}
-  }, [volunteerDrives]);
-
+ 
   // Badges (7 badges matching user design specification)
   const [badges, setBadges] = useState<Badge[]>(() => {
     const saved = localStorage.getItem('prajapulse_badges');
@@ -322,15 +283,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return INITIAL_BADGES;
   });
 
-  // Learning Modules (safe parse)
-  const [modules, setModules] = useState<LearnModule[]>(() => {
-    try {
-      const saved = localStorage.getItem('prajapulse_modules');
-      return saved ? JSON.parse(saved) : INITIAL_MODULES;
-    } catch {
-      return INITIAL_MODULES;
-    }
-  });
 
   // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -368,16 +320,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [notifications]);
 
   useEffect(() => {
-    localStorage.setItem('prajapulse_applied_vacancies', JSON.stringify(appliedVacancies));
-  }, [appliedVacancies]);
-
-  useEffect(() => {
     localStorage.setItem('prajapulse_badges', JSON.stringify(badges));
   }, [badges]);
-
-  useEffect(() => {
-    localStorage.setItem('prajapulse_modules', JSON.stringify(modules));
-  }, [modules]);
 
   const addToast = (title: string, description?: string, type: 'success' | 'info' | 'reward' = 'success') => {
     const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
@@ -871,104 +815,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     markNotificationRead(id).catch(() => undefined);
   };
 
-  const applyVacancy = (vacancyId: string, applicantNote?: string) => {
-    if (appliedVacancies.includes(vacancyId)) {
-      addToast('Application Already Received', 'The team is reviewing your profile.', 'info');
-      return;
-    }
-    setAppliedVacancies((prev) => [...prev, vacancyId]);
-    setUser((u) => ({ ...u, points: u.points + 25 }));
-    addToast('Application Submitted! +25 Points', 'The organizing NGO will contact you via email.', 'reward');
-  };
-
-  const joinVolunteerDrive = (driveId: string) => {
-    setVolunteerDrives((prev) =>
-      prev.map((drive) => {
-        if (drive.id === driveId) {
-          if (drive.userStatus === 'joined' || drive.userStatus === 'proof_submitted') {
-            return drive;
-          }
-          return {
-            ...drive,
-            volunteersJoined: drive.volunteersJoined + 1,
-            userStatus: 'joined' as const,
-          };
-        }
-        return drive;
-      })
-    );
-    addToast(
-      'Joined as Volunteer!',
-      'You are now registered. Upload your photo proof during or after the drive to claim +100 reward points.',
-      'success'
-    );
-  };
-
-  const submitVolunteerProof = (driveId: string, photoDataUrl: string, note: string) => {
-    setVolunteerDrives((prev) =>
-      prev.map((drive) => {
-        if (drive.id === driveId) {
-          return {
-            ...drive,
-            userStatus: 'proof_submitted' as const,
-            proofPhoto: photoDataUrl,
-            proofNote: note,
-          };
-        }
-        return drive;
-      })
-    );
-
-    // Award +100 points and +3 volunteer hours!
-    setUser((u) => ({
-      ...u,
-      points: u.points + 100,
-      stats: {
-        ...u.stats,
-        volunteerHours: (u.stats.volunteerHours || 0) + 3,
-      },
-    }));
-
-    // Add high-priority reward notification
-    const newNotif: UserNotification = {
-      id: 'notif-' + Date.now(),
-      type: 'reward',
-      title: 'Volunteering Proof Verified! +100 Pts',
-      message: `Your photo proof of volunteering was verified. 100 points and 3 volunteer hours credited to your profile! Note: "${note}"`,
-      timestamp: 'Just now',
-      isRead: false,
-      group: 'Today',
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
-
-    addToast(
-      'Photo Proof Verified! +100 Points',
-      'Heroic civic work! 100 points and 3 volunteer hours have been credited to your profile.',
-      'reward'
-    );
-  };
-
-  const completeModuleLesson = (moduleId: string) => {
-    const mod = modules.find((m) => m.id === moduleId);
-    if (!mod) return;
-    const nextProgress = Math.min(100, mod.progress + 25);
-    const isCertified = nextProgress >= 100;
-    const newlyCertified = isCertified && !mod.certified;
-
-    setModules((prev) => prev.map((m) => (m.id === moduleId ? { ...m, progress: nextProgress, certified: isCertified } : m)));
-
-    if (newlyCertified) {
-      claimReward({ action_type: 'academy_module', action_id: moduleId, points: 60 })
-        .then((res) => {
-          applyPoints(res.user_points, res.user_tier);
-          addToast(
-            res.awarded > 0 ? `Module Certified! +${res.awarded} Points` : 'Module Certified!',
-            `Congratulations on completing "${mod.title}"!`,
-            'reward'
-          );
-        })
-        .catch((e) => addToast('Module certified, points not credited', errText(e), 'info'));
-    }
+  const refreshData = async () => {
+    await Promise.all([refreshUser(), refreshPosts(), refreshNotifications()]);
   };
 
   const unreadNotificationsCount = notifications.filter((n) => !n.isRead).length;
@@ -997,16 +845,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         unreadNotificationsCount,
         markAllNotificationsAsRead,
         markNotificationAsRead,
-        vacancies,
-        appliedVacancies,
-        applyVacancy,
-        volunteerDrives,
-        joinVolunteerDrive,
-        submitVolunteerProof,
         syncPoints: applyPoints,
         badges,
-        modules,
-        completeModuleLesson,
         toasts,
         addToast,
         removeToast,
@@ -1032,6 +872,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsSidebarOpen,
         toggleSidebar,
         resolveReport,
+        refreshData,
         theme,
         setTheme,
         toggleTheme,

@@ -44,7 +44,7 @@ class LeaderboardEntry(BaseModel):
 
 
 class ClaimRequest(BaseModel):
-    action_type: str = Field(description="quiz | academy_module")
+    action_type: str = Field(description="Nothing can be claimed any more: every reward is awarded by the server")
     action_id: str = Field(min_length=1, max_length=50, pattern=r"^[A-Za-z0-9_.:-]+$")
     points: int = Field(ge=1, le=100)
 

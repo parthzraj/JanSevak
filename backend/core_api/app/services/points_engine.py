@@ -38,14 +38,13 @@ POINTS: dict[str, int] = {
     "campaign_attend": 30,  # attended a civic drive (confirmed by its organiser)
     "campaign_host": 20,  # base for organising a drive; the router adds 10 per confirmed volunteer (max 80)
     "vacancy_complete": 40,  # finished an NGO volunteering role (confirmed by the NGO)
+    "course_complete": 60,  # finished a Civic Academy course (every lesson verified by the server / the NGO)
 }
 
 # Actions a *client* may claim itself (the server cannot verify them any other way).
-# Quizzes are no longer here: the server grades them (see routers/quizzes.py).
-# Value = (min, max) points the client may ask for.
-CLIENT_CLAIMABLE: dict[str, tuple[int, int]] = {
-    "academy_module": (15, 60),
-}
+# Nothing is left: quizzes are graded by the server (routers/quizzes.py) and Civic Academy
+# courses are verified by the server and the NGO (routers/academy.py). Value = (min, max) points.
+CLIENT_CLAIMABLE: dict[str, tuple[int, int]] = {}
 
 # ---- Tiers --------------------------------------------------------------------
 TIERS: list[tuple[str, int]] = [  # ascending thresholds
@@ -101,8 +100,10 @@ def today_bounds_utc(now: datetime | None = None) -> tuple[datetime, datetime]:
 # Contest prizes and confirmed volunteering are paid outside the daily cap, so they must not eat into it either.
 # Volunteering is throttled separately (MAX_VOLUNTEER_REWARDS_PER_WEEK) so it cannot be farmed.
 VOLUNTEER_ACTIONS = ("campaign_attend", "campaign_host", "vacancy_complete")
-UNCAPPED_ACTIONS = ("contest_play", "contest_win") + VOLUNTEER_ACTIONS
+COURSE_ACTIONS = ("course_complete",)
+UNCAPPED_ACTIONS = ("contest_play", "contest_win") + VOLUNTEER_ACTIONS + COURSE_ACTIONS
 MAX_VOLUNTEER_REWARDS_PER_WEEK = 3
+MAX_COURSE_REWARDS_PER_WEEK = 2  # certificates are always issued; only the points are throttled
 
 
 def volunteer_rewards_this_week(db: Session, user_id: int) -> int:
@@ -113,6 +114,22 @@ def volunteer_rewards_this_week(db: Session, user_id: int) -> int:
             select(func.count(RewardTransaction.id)).where(
                 RewardTransaction.user_id == user_id,
                 RewardTransaction.action_type.in_(VOLUNTEER_ACTIONS),
+                RewardTransaction.points > 0,
+                RewardTransaction.created_at >= since,
+            )
+        )
+        or 0
+    )
+
+
+def course_rewards_this_week(db: Session, user_id: int) -> int:
+    """How many Civic Academy course rewards the user got in the last 7 days."""
+    since = utcnow() - timedelta(days=7)
+    return int(
+        db.scalar(
+            select(func.count(RewardTransaction.id)).where(
+                RewardTransaction.user_id == user_id,
+                RewardTransaction.action_type.in_(COURSE_ACTIONS),
                 RewardTransaction.points > 0,
                 RewardTransaction.created_at >= since,
             )

@@ -223,18 +223,6 @@ export interface Badge {
   category: string;
 }
 
-export interface LearnModule {
-  id: string;
-  title: string;
-  duration: string;
-  level: 'Beginner' | 'Intermediate' | 'Advanced';
-  lessonsCount: number;
-  progress: number;
-  description: string;
-  keyTakeaways: string[];
-  certified: boolean;
-}
-
 export interface UserProfile {
   id: string;
   name: string;

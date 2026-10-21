@@ -8,12 +8,14 @@ import { SearchScreen } from './pages/SearchScreen';
 import { CreateReportScreen } from './pages/CreateReportScreen';
 import { PositiveImpactScreen } from './pages/PositiveImpactScreen';
 import { MenuScreen } from './pages/MenuScreen';
-import { VacanciesScreen } from './pages/VacanciesScreen';
+import { VolunteerHubScreen } from './pages/VolunteerHubScreen';
 import { ContestScreen } from './pages/ContestScreen';
 import { NgoStudioScreen } from './pages/NgoStudioScreen';
 import { GamesScreen } from './pages/GamesScreen';
 import { ReportAnalysisScreen } from './pages/ReportAnalysisScreen';
-import { LearnCertifyScreen } from './pages/LearnCertifyScreen';
+import { AcademyScreen } from './pages/AcademyScreen';
+import { AcademyCourseScreen } from './pages/AcademyCourseScreen';
+import { CertificateVerifyScreen } from './pages/CertificateVerifyScreen';
 import { NotificationsScreen } from './pages/NotificationsScreen';
 import { RewardsScreen } from './pages/RewardsScreen';
 import { ProfileScreen } from './pages/ProfileScreen';
@@ -82,13 +84,14 @@ const AppRoutes: React.FC = () => {
           }
         />
         <Route
-          path="/vacancies"
+          path="/volunteer"
           element={
             <ProtectedRoute>
-              <VacanciesScreen />
+              <VolunteerHubScreen />
             </ProtectedRoute>
           }
         />
+        <Route path="/vacancies" element={<Navigate to="/volunteer" replace />} />
         <Route path="/contest/:id" element={<ProtectedRoute><ContestScreen /></ProtectedRoute>} />
         <Route path="/ngo" element={<ProtectedRoute><NgoStudioScreen /></ProtectedRoute>} />
         <Route
@@ -107,14 +110,9 @@ const AppRoutes: React.FC = () => {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/learn-certify"
-          element={
-            <ProtectedRoute>
-              <LearnCertifyScreen />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/learn-certify" element={<Navigate to="/academy" replace />} />
+        <Route path="/academy" element={<ProtectedRoute><AcademyScreen /></ProtectedRoute>} />
+        <Route path="/academy/:courseId" element={<ProtectedRoute><AcademyCourseScreen /></ProtectedRoute>} />
         <Route path="/badges-certificates" element={<Navigate to="/rewards" replace />} />
         <Route path="/badges" element={<Navigate to="/rewards" replace />} />
         <Route
@@ -182,7 +180,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppProvider>
-        <AppRoutes />
+        <Routes>
+          {/* public: anyone with a certificate code can check it, no login and no app shell */}
+          <Route path="/certificate/:code" element={<CertificateVerifyScreen />} />
+          <Route path="*" element={<AppRoutes />} />
+        </Routes>
       </AppProvider>
     </BrowserRouter>
   );

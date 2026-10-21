@@ -249,7 +249,7 @@ export const fetchAnalytics = () => request<{ mine: BackendStats; community: Bac
 // Issues, votes, comments
 // ---------------------------------------------------------------------------
 export const fetchIssues = (
-  params: { page_size?: number; sort?: 'recent' | 'votes'; category?: string; reporter_id?: number } = {}
+  params: { page_size?: number; sort?: 'recent' | 'votes'; category?: string; reporter_id?: number; q?: string; status?: string } = {}
 ) => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => v !== undefined && query.set(k, String(v)));
@@ -614,6 +614,7 @@ export async function analyzeImage(imageFile: File): Promise<{
   return response.json();
 }
 
+
 // ---------------------------------------------------------------------------
 // Predictive Alerts (AI)
 // ---------------------------------------------------------------------------
@@ -664,7 +665,7 @@ export async function verifyPhoto(imageFile: File): Promise<{
   return response.json();
 }
 
-// ---------------------------------------------------------------------------  
+// ---------------------------------------------------------------------------
 // Auto-draft from photo (AI)
 // ---------------------------------------------------------------------------
 export async function prepareWithImage(imageFile: File, issue?: string, location?: string): Promise<{
@@ -694,6 +695,7 @@ export async function prepareWithImage(imageFile: File, issue?: string, location
 }
 
 // ---------------------------------------------------------------------------
+
 // Feed Prioritization (AI)
 // ---------------------------------------------------------------------------
 export async function prioritizeFeed(
@@ -704,6 +706,152 @@ export async function prioritizeFeed(
     body: JSON.stringify({ complaints }),
   });
 }
+
+
+// Civic drives (campaigns) and NGO volunteering (vacancies)
+// ---------------------------------------------------------------------------
+export interface Person {
+  id: number;
+  name: string;
+  avatar_url: string | null;
+  ward: string | null;
+  is_ngo: boolean;
+}
+
+export const CAMPAIGN_KINDS = ['Cleanup', 'Tree Plantation', 'Awareness', 'Repair', 'Donation Drive', 'Other'] as const;
+export type CampaignKind = (typeof CAMPAIGN_KINDS)[number];
+export type CampaignStatus = 'Upcoming' | 'Ongoing' | 'Awaiting wrap-up' | 'Completed' | 'Cancelled';
+
+export interface Campaign {
+  id: number;
+  title: string;
+  description: string;
+  kind: string;
+  status: CampaignStatus;
+  organiser: Person;
+  organiser_type: 'NGO' | 'Citizen';
+  issue: { id: number; title: string; category: string; status: string } | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  starts_at: string;
+  ends_at: string;
+  volunteers_needed: number;
+  volunteers_joined: number;
+  volunteers_attended: number;
+  my_status: 'Joined' | 'Attended' | 'NoShow' | null;
+  is_organiser: boolean;
+  host_points: number;
+  points_per_volunteer: number;
+  created_at: string;
+}
+
+export interface CampaignMember {
+  user_id: number;
+  name: string;
+  avatar_url: string | null;
+  ward: string | null;
+  status: 'Joined' | 'Attended' | 'NoShow';
+  points_awarded: number;
+}
+
+export interface CampaignDetail extends Campaign {
+  members: CampaignMember[];
+}
+
+export interface CampaignDraft {
+  title: string;
+  description: string;
+  kind: string;
+  issue_id?: number | null;
+  address?: string;
+  starts_at: string;
+  ends_at: string;
+  volunteers_needed: number;
+}
+
+export interface CompleteResult {
+  campaign: CampaignDetail;
+  attended: number;
+  no_show: number;
+  host_points_awarded: number;
+  volunteers_paid: number;
+  notes: string[];
+}
+
+export const fetchCampaigns = (
+  p: { status?: string; organiser_type?: string; mine?: boolean; issue_id?: number; page_size?: number } = {}
+) => {
+  const q = new URLSearchParams();
+  Object.entries(p).forEach(([k, v]) => v !== undefined && v !== '' && v !== false && q.set(k, String(v)));
+  return request<{ items: Campaign[]; total: number }>(`/api/campaigns?${q.toString()}`);
+};
+export const fetchCampaign = (id: number | string) => request<CampaignDetail>(`/api/campaigns/${id}`);
+export const createCampaign = (draft: CampaignDraft) => post<CampaignDetail>('/api/campaigns', draft);
+export const joinCampaign = (id: number) => post<CampaignDetail>(`/api/campaigns/${id}/join`);
+export const leaveCampaign = (id: number) => request<CampaignDetail>(`/api/campaigns/${id}/join`, { method: 'DELETE' });
+export const cancelCampaign = (id: number) => post<CampaignDetail>(`/api/campaigns/${id}/cancel`);
+export const completeCampaign = (id: number, attended_user_ids: number[]) =>
+  post<CompleteResult>(`/api/campaigns/${id}/complete`, { attended_user_ids });
+
+export type ApplicationStatus = 'Applied' | 'Accepted' | 'Rejected' | 'Completed' | 'Withdrawn';
+export const ROLE_TYPES = ['Volunteer', 'Internship', 'Fellowship', 'Part-time'] as const;
+
+export interface Vacancy {
+  id: number;
+  title: string;
+  role_type: string;
+  description: string;
+  location: string | null;
+  commitment: string | null;
+  skills: string | null;
+  slots: number;
+  accepted_count: number;
+  applicants_count: number;
+  deadline: string | null;
+  is_open: boolean;
+  ngo: Person;
+  is_owner: boolean;
+  my_application: ApplicationStatus | null;
+  created_at: string;
+}
+
+export interface VacancyDraft {
+  title: string;
+  role_type: string;
+  description: string;
+  location?: string;
+  commitment?: string;
+  skills?: string;
+  slots: number;
+  deadline?: string | null;
+}
+
+export interface VacancyApplication {
+  id: number;
+  vacancy_id: number;
+  applicant: Person;
+  note: string | null;
+  status: ApplicationStatus;
+  points_awarded: number;
+  created_at: string;
+}
+
+export const fetchVacancies = (p: { mine?: boolean; include_closed?: boolean } = {}) => {
+  const q = new URLSearchParams();
+  Object.entries(p).forEach(([k, v]) => v && q.set(k, 'true'));
+  return request<{ items: Vacancy[]; total: number }>(`/api/vacancies?${q.toString()}`);
+};
+export const createVacancy = (d: VacancyDraft) => post<Vacancy>('/api/vacancies', d);
+export const closeVacancy = (id: number) => post<Vacancy>(`/api/vacancies/${id}/close`);
+export const applyToVacancy = (id: number, note?: string) => post<Vacancy>(`/api/vacancies/${id}/apply`, { note });
+export const withdrawApplication = (id: number) => request<Vacancy>(`/api/vacancies/${id}/apply`, { method: 'DELETE' });
+export const fetchApplications = (id: number) => request<VacancyApplication[]>(`/api/vacancies/${id}/applications`);
+export const decideApplication = (vacancyId: number, appId: number, status: 'Accepted' | 'Rejected' | 'Completed') =>
+  request<VacancyApplication>(`/api/vacancies/${vacancyId}/applications/${appId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
 
 export default {
   getToken,

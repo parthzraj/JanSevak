@@ -105,7 +105,7 @@ def leaderboard(
 
 @router.post("/claim", response_model=ClaimResponse)
 def claim(body: ClaimRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Claim points for quizzes / academy modules (the only actions the server can't verify itself).
+    """Legacy claim endpoint. Quizzes and Civic Academy courses are now verified by the server, so nothing is claimable.
 
     One claim per (user, action_type, action_id) ever - re-taking a quiz earns 0 - and
     everything still counts toward the daily cap. Verified actions (reports, votes,

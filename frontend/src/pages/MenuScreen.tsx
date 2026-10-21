@@ -31,7 +31,7 @@ export const MenuScreen: React.FC = () => {
         {/* Left Button (Half): Ward Volunteering */}
         <button
           type="button"
-          onClick={() => navigate('/vacancies')}
+          onClick={() => navigate('/volunteer')}
           className="text-left w-full relative overflow-hidden bg-gradient-to-br from-[#0f2d59] via-[#1B6643] to-[#257C53] text-white rounded-3xl p-3.5 sm:p-4 shadow-sm hover:shadow-lg active:scale-[0.98] transition-all duration-300 group cursor-pointer border border-[#1d4e8c]/40 focus:outline-none flex flex-col justify-between min-h-[145px]"
         >
           {/* Subtle Decorative Ambient Glows */}
@@ -51,16 +51,16 @@ export const MenuScreen: React.FC = () => {
           {/* Text Content */}
           <div className="relative z-10 space-y-1 my-1">
             <h2 className="text-sm sm:text-base font-black tracking-tight text-white leading-tight">
-              Cleanups & Tree Drives
+              NGO Volunteering &amp; Civic Drives
             </h2>
             <p className="text-[11px] text-emerald-100/90 leading-snug line-clamp-2">
-              Join verified NGO initiatives in Ward 112.
+              Join or start a drive, or apply for an NGO role.
             </p>
           </div>
 
           {/* Bottom Footer Line */}
           <div className="relative z-10 flex items-center justify-between pt-1.5 border-t border-white/15 text-[10.5px] font-bold text-emerald-200">
-            <span>4 Active Drives</span>
+            <span>Drives &amp; roles</span>
             <span className="group-hover:translate-x-0.5 transition-transform">Join →</span>
           </div>
         </button>
@@ -232,7 +232,7 @@ export const MenuScreen: React.FC = () => {
           {/* Tile 3: Learn & Certify */}
           <button
             type="button"
-            onClick={() => navigate('/learn-certify')}
+            onClick={() => navigate('/academy')}
             className="text-left bg-white rounded-3xl p-4 border border-[#cbd5e1] shadow-xs hover:shadow-md hover:border-teal-400/50 active:scale-[0.98] transition-all duration-300 group cursor-pointer flex flex-col justify-between space-y-3 relative overflow-hidden focus:outline-none"
           >
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-500 to-emerald-600" />
@@ -243,7 +243,7 @@ export const MenuScreen: React.FC = () => {
                   <GraduationCap className="w-5 h-5" />
                 </div>
                 <span className="text-[10px] font-extrabold text-teal-900 bg-teal-50 border border-teal-200/80 px-2 py-0.5 rounded-full">
-                  3 Modules
+                  NGO courses
                 </span>
               </div>
 
@@ -252,7 +252,7 @@ export const MenuScreen: React.FC = () => {
                   Civic Academy
                 </h3>
                 <p className="text-[11px] text-[#64748B] mt-0.5 leading-snug line-clamp-2">
-                  Official municipal modules on RTI, safety & cleanliness.
+                  NGO-run courses with video lessons, real tasks and verified certificates.
                 </p>
               </div>
             </div>

@@ -104,6 +104,7 @@ ACTION_LABELS = {
     "vacancy_complete": "NGO volunteering completed",
     "quiz": "Quizzes passed",
     "academy_module": "Academy modules",
+    "course_complete": "Civic Academy courses completed",
 }
 
 

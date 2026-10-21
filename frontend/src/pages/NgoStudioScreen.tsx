@@ -3,6 +3,9 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Loader2, Megaphone } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ContestCard } from '../components/common/ContestCard';
+import { CampaignBoard } from '../components/volunteer/CampaignBoard';
+import { NgoVacancyManager } from '../components/volunteer/NgoVacancyManager';
+import { NgoCourseManager } from '../components/academy/NgoCourseManager';
 import { ApiError, createContest, fetchContests, type Contest, type ContestDraft } from '../lib/api';
 
 interface QDraft { question: string; options: string[]; answer_index: number; explanation: string }
@@ -17,6 +20,7 @@ export const NgoStudioScreen: React.FC = () => {
   const { user, addToast, logout } = useApp();
   const navigate = useNavigate();
 
+  const [tab, setTab] = useState<'contests' | 'vacancies' | 'drives' | 'courses'>('contests');
   const [mine, setMine] = useState<Contest[] | null>(null);
   const [title, setTitle] = useState('');
   const [topic, setTopic] = useState('Sanitation');
@@ -72,11 +76,25 @@ export const NgoStudioScreen: React.FC = () => {
         <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center"><Megaphone className="w-5 h-5 text-emerald-700" /></div>
         <div className="flex-1 min-w-0">
           <h1 className="text-base font-extrabold text-[#0f172a]">NGO Studio</h1>
-          <p className="text-[11px] text-[#64748b] truncate">{user.name} · publish quiz contests for the community</p>
+          <p className="text-[11px] text-[#64748b] truncate">{user.name} · contests, courses, vacancies and civic drives</p>
         </div>
         <button onClick={() => { logout(); navigate('/login'); }} className="text-[11px] font-bold text-rose-700 border border-rose-200 rounded-xl px-3 py-1.5">Sign out</button>
       </div>
 
+      <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-[#e2e8f0]" role="tablist">
+        {([['contests', 'Contests'], ['courses', 'Courses'], ['vacancies', 'Vacancies'], ['drives', 'Drives']] as const).map(([key, label]) => (
+          <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
+            className={`py-2 rounded-xl text-xs font-extrabold cursor-pointer transition-colors ${tab === key ? 'bg-white text-[#0f2d59] shadow-sm' : 'text-[#475569]'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'courses' && <NgoCourseManager />}
+      {tab === 'vacancies' && <NgoVacancyManager />}
+      {tab === 'drives' && <CampaignBoard onlyMine />}
+
+      {tab === 'contests' && (<>
       <form onSubmit={publish} className="bg-white rounded-3xl p-5 border border-[#cbd5e1] space-y-3">
         <h2 className="text-sm font-extrabold text-[#0f172a]">Publish a contest</h2>
         <input required minLength={3} className={field} placeholder="Contest title" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -129,6 +147,7 @@ export const NgoStudioScreen: React.FC = () => {
         {mine?.length === 0 && <p className="text-xs text-[#64748b] px-1">Nothing published yet.</p>}
         {mine?.map((c) => <ContestCard key={c.id} contest={c} onOpen={() => navigate(`/contest/${c.id}`)} />)}
       </div>
+      </>)}
     </div>
   );
 };

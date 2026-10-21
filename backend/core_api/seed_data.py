@@ -26,9 +26,11 @@ from app.models import (  # noqa: E402
     CampaignMember,
     CivicIssue,
     Contest,
+    Course,
     IssueComment,
     IssueTimelineEvent,
     IssueVote,
+    Lesson,
     RewardTransaction,
     User,
     Vacancy,
@@ -93,6 +95,74 @@ ISSUES = [
         "so this needs repair before someone is hurt.",
         "Parks", "Low", "Defence Colony Park, Indiranagar, Bengaluru", 12.9765, 77.6371, "Resolved",
         ["ayush@example.com", "rahul@example.com"],
+    ),
+]
+
+
+# Civic Academy sample courses (text + tasks; add video lessons from NGO Studio -> Courses with a YouTube link).
+SEED_COURSES = [
+    dict(
+        title="Rainwater Harvesting for Your Home", level="Beginner", category="Water",
+        summary="Learn how a roof becomes a water source, work out your own yield and plan a recharge pit.",
+        description="Bengaluru's borewells are falling while monsoon water runs into drains. In this short course you learn how rainwater harvesting works, estimate how much water your own roof can collect, and plan where it would go.",
+        lessons=[
+            dict(kind="reading", title="Why harvest rain at home?", summary="The problem, and the two ways to use roof water.",
+                 body=("Most of the rain that falls on a city roof leaves as storm-water. That is a double loss: the groundwater under the city keeps dropping, "
+                       "and the same water floods streets a few minutes later. Rainwater harvesting catches that roof water before it leaves the plot.\n\n"
+                       "There are two simple ways to use it. First, store it: a sump or tank collects the clean roof water and you use it for gardening, washing or flushing. "
+                       "Second, recharge: a recharge well or pit lets the water soak down and refill the shallow aquifer your borewell or neighbours' borewells draw from.\n\n"
+                       "Every system has the same four parts: a catchment (the roof), gutters and downpipes to carry the water, a filter or first-flush diverter that throws away the dirty first minutes of rain, "
+                       "and the storage or recharge point. If any part is missing the system clogs or pollutes the groundwater.")),
+            dict(kind="reading", title="How much water can your roof collect?", summary="A simple formula you can use with a calculator.",
+                 body=("Yield in litres is roughly: roof area in square metres multiplied by yearly rainfall in millimetres multiplied by 0.8. The 0.8 is a runoff factor that allows for losses.\n\n"
+                       "Example: a 1000 sq ft roof is about 93 square metres. Bengaluru gets about 900 to 950 mm of rain a year. 93 x 950 x 0.8 is about 70,000 litres a year. "
+                       "That is the figure for a whole year, and most of it arrives in a few heavy months, so storage or recharge capacity matters as much as the roof.\n\n"
+                       "To use the formula: measure the length and breadth of your terrace in feet, multiply to get square feet, divide by 10.76 to get square metres, then follow the steps above. "
+                       "Use the rainfall figure for your own city if you do not live in Bengaluru.")),
+            dict(kind="task", title="Photograph your catchment", summary="A physical task: find where your roof water goes today.", task_mode="physical", proof_type="photo",
+                 instructions="Go to your terrace or the nearest roof. Take one clear photo showing the roof surface together with the downpipe (or the edge where water drains). Only one photo is needed. The NGO checks that it shows a real roof and drainage point."),
+            dict(kind="task", title="Work out your yield", summary="An online task: apply the formula to your own roof.", task_mode="online", proof_type="text",
+                 instructions="Write your roof area in square feet, convert it to square metres, apply the formula and give the litres per year. Then say in one or two sentences where you would send the water (storage or recharge) and why."),
+        ],
+    ),
+    dict(
+        title="Your Right to Information in 20 Minutes", level="Beginner", category="Rights & RTI",
+        summary="Understand what the RTI Act lets you ask for and draft your first application.",
+        description="The Right to Information Act, 2005 lets any citizen ask a public office for records and decisions. You will learn what to ask, who to ask, what to expect and how to appeal, and you will draft a real question about your own neighbourhood.",
+        lessons=[
+            dict(kind="reading", title="What RTI is, and what it is not", summary="Who can ask, who must answer, what you can ask for.",
+                 body=("Under the Right to Information Act, 2005, any Indian citizen can ask a public authority for information it holds: files, orders, measurements, expenses, inspection reports, work-order copies and similar records. "
+                       "Every public office has a Public Information Officer (PIO) who must answer your written request.\n\n"
+                       "RTI is for records that already exist. It is not a complaint box and the office does not have to create new data, give opinions, or answer 'why' questions. "
+                       "Ask for specific documents or facts: 'copy of the work order for the footpath repair on 12th Main between January and June' works; 'why is the footpath bad?' does not.\n\n"
+                       "Some information is exempt, for example matters that threaten security or personal data with no public interest. If something is refused the office must say which exemption applies.")),
+            dict(kind="reading", title="Applying and appealing", summary="The steps, the timeline and the first appeal.",
+                 body=("Write your request on paper or on your state's online RTI portal. Say who you are, address it to the PIO of the right department, list your questions as numbered points and pay the application fee. "
+                       "The fee is usually small (often 10 rupees) and differs by state, so check your state's rules. Keep a copy and the postal or portal receipt.\n\n"
+                       "The PIO normally has to reply within 30 days. If your question concerns a person's life or liberty the limit is 48 hours. "
+                       "If you get no reply or an unsatisfactory one, you can file a first appeal with the First Appellate Authority in the same department, normally within 30 days of the reply or of the deadline passing. "
+                       "A second appeal then goes to the Information Commission.\n\n"
+                       "Numbered, specific questions, dates and the exact name of the place or scheme get the best answers.")),
+            dict(kind="task", title="Draft your first RTI question", summary="An online task: write a precise request about a local issue.", task_mode="online", proof_type="text",
+                 instructions="Pick a real civic issue near you (a road, drain, streetlight or water supply). Write the department you would address, then two or three numbered questions asking for specific records, with dates where possible. Do not ask 'why' questions. You do not have to send it."),
+        ],
+    ),
+    dict(
+        title="Segregate at Source: Wet, Dry and Reject", level="Beginner", category="Waste",
+        summary="Set up three-way segregation at home and keep it going.",
+        description="Waste that is mixed at home cannot be recycled or composted later. This course shows the simple wet / dry / reject system, why it matters for your ward, and asks you to set it up at home and show it.",
+        lessons=[
+            dict(kind="reading", title="The three streams", summary="What goes where, and why mixed waste is the real problem.",
+                 body=("Segregation at source means separating waste where it is created, in your kitchen, not at a landfill. A common household system has three streams.\n\n"
+                       "Wet waste is food scraps, peels, flowers and garden leaves. It can be composted or sent to a bio-methane plant. "
+                       "Dry waste is paper, cardboard, plastic, metal and glass. Keep it clean and dry so a waste-picker or recycler can use it. "
+                       "Reject or sanitary waste is diapers, sanitary pads, bandages and broken ceramics, plus household hazardous items like batteries and bulbs, which should be handed over separately as the rules in your city describe.\n\n"
+                       "A wet mess ruins recyclable paper and plastic, which is why mixed waste ends up in landfills and why collectors refuse mixed bins.")),
+            dict(kind="task", title="Set up your three bins", summary="A physical task: show your household segregation set-up.", task_mode="physical", proof_type="photo",
+                 instructions="Set up three clearly separated containers or bags at home: wet, dry and reject/sanitary. Label them. Take one photo that shows all three together with their labels. A photo of a single bin will not be accepted."),
+            dict(kind="task", title="Tell us your plan", summary="An online task: say how wet waste will be handled.", task_mode="online", proof_type="text",
+                 instructions="In three or four sentences describe what happens to your wet waste: home compost, a community composting point, or your ward's wet-waste collection. Mention who collects dry waste and on which day."),
+        ],
     ),
 ]
 
@@ -226,6 +296,12 @@ def main() -> None:
             db.flush()
             db.add(CampaignMember(campaign_id=camp_citizen.id, user_id=users["priya@example.com"].id))
             print("  + 2 campaigns")
+
+        if not db.scalar(select(Course.id)):
+            for c in SEED_COURSES:
+                lessons = [Lesson(position=i, **l) for i, l in enumerate(c.pop("lessons"), start=1)]
+                db.add(Course(ngo_id=ngo.id, published_at=utcnow(), lessons=lessons, **c))
+            print(f"  + {len(SEED_COURSES)} Civic Academy courses")
 
         db.commit()
         print(f"\nDone. {created} issue(s) added. Demo password for every account: {PASSWORD}")

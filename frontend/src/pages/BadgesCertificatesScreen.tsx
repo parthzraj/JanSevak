@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -24,10 +24,10 @@ import {
   MyCertificatesHeaderBanner,
   PopOutCertificateViewer,
   CertificateScrollCard,
-  PrajaCertificateCard,
-  PRAJA_CERTIFICATES,
   PrajaCertificateData,
 } from '../components/common/PrajaCertificateCard';
+import { PRINT_CSS, toPrajaCertificate, verifyLink } from '../components/academy/CertificateModal';
+import { fetchMyCertificates } from '../lib/academyApi';
 
 export const BadgesCertificatesScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -42,12 +42,20 @@ export const BadgesCertificatesScreen: React.FC = () => {
   const redeem = redeemableSummary(user.points);
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
   const [selectedCertificate, setSelectedCertificate] = useState<PrajaCertificateData | null>(null);
+  // Only certificates really earned by finishing a Civic Academy course
+  const [certs, setCerts] = useState<PrajaCertificateData[] | null>(null);
+  useEffect(() => {
+    fetchMyCertificates()
+      .then((list) => setCerts(list.map(toPrajaCertificate)))
+      .catch(() => setCerts([]));
+  }, []);
+  const certList = certs ?? [];
 
-  const handleShareCertificate = (title: string) => {
-    navigator.clipboard?.writeText?.(window.location.href);
+  const handleShareCertificate = (cert: PrajaCertificateData) => {
+    navigator.clipboard?.writeText?.(verifyLink(cert.id));
     addToast(
-      'Certificate Link Copied!',
-      `Ready to share "${title}" on WhatsApp, LinkedIn, or Twitter.`,
+      'Verify link copied',
+      `Anyone with the link can check that "${cert.category}" is genuine.`,
       'success'
     );
   };
@@ -222,38 +230,61 @@ export const BadgesCertificatesScreen: React.FC = () => {
       {/* ============================================================ */}
       {activeTab === 'certificates' && (
         <div className="space-y-5 animate-in fade-in duration-200">
-          {/* 1. Header Banner */}
           <MyCertificatesHeaderBanner />
 
-          {/* 2. Pop-Out Certificate Viewer (Exact Match from Screenshot: Floating Arrows & Pill Dots) */}
-          <div className="py-2">
-            <PopOutCertificateViewer
-              certificates={PRAJA_CERTIFICATES}
-              userName={user.name || 'Ayush Sharma'}
-              onCertificateChange={(cert) => setSelectedCertificate(cert)}
-            />
-          </div>
-
-          {/* 3. Scrolling List of Certificate Cards (Dark Teal Feed with Download) */}
-          <div className="space-y-4 pt-2">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-black uppercase tracking-wider text-[#0f2d59]">
-                All Verified Certificates
-              </span>
-              <span className="text-[11px] font-bold text-[#4A7C59]">
-                {PRAJA_CERTIFICATES.length} Available
-              </span>
+          {certs === null && (
+            <div className="py-10 flex justify-center">
+              <div className="w-5 h-5 rounded-full border-2 border-[#0f2d59] border-t-transparent animate-spin" />
             </div>
+          )}
 
-            {PRAJA_CERTIFICATES.map((cert) => (
-              <CertificateScrollCard
-                key={cert.id}
-                certificate={cert}
-                onView={(c) => setSelectedCertificate(c)}
-                onDownload={(c) => handleDownloadCertificate(c)}
-              />
-            ))}
-          </div>
+          {certs !== null && certList.length === 0 && (
+            <div className="bg-white dark:bg-[#111c2e] rounded-3xl border border-dashed border-[#cbd5e1] dark:border-slate-700 p-8 text-center space-y-2">
+              <Award className="w-9 h-9 text-[#94a3b8] mx-auto" />
+              <p className="text-sm font-extrabold text-[#0f172a] dark:text-white">No certificates yet</p>
+              <p className="text-xs text-[#64748b] dark:text-slate-400">
+                A certificate is issued only when you finish every lesson of a Civic Academy course and the NGO has approved your tasks.
+              </p>
+              <button
+                onClick={() => navigate('/academy')}
+                className="mt-1 px-4 py-2 rounded-xl bg-[#0f2d59] text-white text-xs font-bold cursor-pointer"
+              >
+                Browse courses
+              </button>
+            </div>
+          )}
+
+          {certList.length > 0 && (
+            <>
+              <div className="py-2">
+                <PopOutCertificateViewer
+                  certificates={certList}
+                  userName={user.name}
+                  onCertificateChange={(cert) => setSelectedCertificate(cert)}
+                />
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-black uppercase tracking-wider text-[#0f2d59]">
+                    All Verified Certificates
+                  </span>
+                  <span className="text-[11px] font-bold text-[#4A7C59]">
+                    {certList.length} Earned
+                  </span>
+                </div>
+
+                {certList.map((cert) => (
+                  <CertificateScrollCard
+                    key={cert.id}
+                    certificate={cert}
+                    onView={(c) => setSelectedCertificate(c)}
+                    onDownload={(c) => handleDownloadCertificate(c)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -290,13 +321,14 @@ export const BadgesCertificatesScreen: React.FC = () => {
             </button>
 
             {/* Pop-Out Certificate Carousel */}
-            <div className="pt-2">
+            <style>{PRINT_CSS}</style>
+            <div className="pt-2 print-certificate">
               <PopOutCertificateViewer
-                certificates={PRAJA_CERTIFICATES}
-                userName={user.name || 'Ayush Sharma'}
+                certificates={certList}
+                userName={user.name}
                 initialIndex={Math.max(
                   0,
-                  PRAJA_CERTIFICATES.findIndex((c) => c.id === selectedCertificate.id)
+                  certList.findIndex((c) => c.id === selectedCertificate.id)
                 )}
                 onCertificateChange={(cert) => setSelectedCertificate(cert)}
               />
@@ -305,7 +337,7 @@ export const BadgesCertificatesScreen: React.FC = () => {
             {/* Actions: Share & Download PDF */}
             <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
-                onClick={() => handleShareCertificate(selectedCertificate.category)}
+                onClick={() => handleShareCertificate(selectedCertificate)}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#0f2d59] hover:bg-[#07172c] dark:bg-blue-600 dark:hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-[0.99]"
               >
                 <Share2 className="w-4 h-4" />

@@ -141,10 +141,10 @@ export const BottomNavigation: React.FC = () => {
             className={`flex-1 flex flex-col items-center justify-center py-1 min-h-[48px] transition-colors cursor-pointer ${
               isMenuPopupOpen ||
               isActive('/menu') ||
-              isActive('/vacancies') ||
+              isActive('/volunteer') ||
               isActive('/games') ||
               isActive('/report-analysis') ||
-              isActive('/learn-certify') ||
+              currentPath.startsWith('/academy') ||
               isActive('/rewards')
                 ? 'text-[#0f2d59] dark:text-blue-400'
                 : 'text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white'

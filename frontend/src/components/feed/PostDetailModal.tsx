@@ -33,6 +33,7 @@ import { DepartmentModal, getDepartmentInfo } from './DepartmentModal';
 import { SupporterAvatar, SupportersModal } from './SupportersModal';
 import { Avatar } from '../common/Avatar';
 import { useProfileLink } from '../../lib/useProfileLink';
+import { IssueDrives } from '../volunteer/IssueDrives';
 
 export const PostDetailModal: React.FC = () => {
   const navigate = useNavigate();
@@ -893,6 +894,19 @@ export const PostDetailModal: React.FC = () => {
               View all &rarr;
             </button>
           </div>
+
+          {/^\d+$/.test(post.id) && (
+            <IssueDrives
+              issueId={Number(post.id)}
+              title={post.title}
+              category={post.category}
+              address={post.reporter.wardOrArea}
+              onOpenDrive={(id) => {
+                setSelectedPostForDetail(null);
+                navigate(`/volunteer?drive=${id}`);
+              }}
+            />
+          )}
 
           {/* 11. Community Discussion & Citizen Comments */}
           <div className="p-4 bg-white rounded-2xl border border-[#cbd5e1] shadow-xs space-y-3">
