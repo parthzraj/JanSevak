@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -10,160 +10,141 @@ import {
   ThumbsUp,
   MessageCircle,
   Image as ImageIcon,
-  Video,
   PlaySquare,
-  Play,
   Layers,
-  Film,
   CheckCircle2,
   AlertCircle,
-  Share2,
-  Volume2,
+  Loader2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { CivicCategory, CivicPost, ReelStory } from '../types';
+import { fetchIssues } from '../lib/api';
 import { getReels } from '../lib/reelsApi';
-import { reelFallbackImage, toReel } from '../lib/mappers';
+import { reelFallbackImage, toCivicPost, toReel } from '../lib/mappers';
 
-interface CivicVideo {
-  id: string;
-  title: string;
-  duration: string;
-  thumbnail: string;
-  reporter: {
-    name: string;
-    avatar: string;
-  };
-  views: string;
-  likes: number;
-  commentsCount: number;
-  locality: string;
-  category: CivicCategory;
-  postId?: string;
-  description: string;
-}
-
-const CIVIC_VIDEOS: CivicVideo[] = [
-  {
-    id: 'vid-1',
-    title: 'BWSSB Pipeline Pressure Valve Burst on 80ft Road Footage',
-    duration: '0:42',
-    thumbnail: 'https://images.unsplash.com/photo-1541888946425-d0fbb186156f?auto=format&fit=crop&w=800&q=80',
-    reporter: {
-      name: 'Kavita Sundaram',
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=256&q=80',
-    },
-    views: '1.8k views',
-    likes: 124,
-    commentsCount: 9,
-    locality: 'HAL 2nd Stage · Ward 113',
-    category: 'Water',
-    postId: 'post-2',
-    description: 'Caught on video: Water flowing onto pedestrian pavement. Excavation team requested.',
-  },
-  {
-    id: 'vid-2',
-    title: 'Overnight Asphalt Paver in Action on 100ft Road',
-    duration: '0:58',
-    thumbnail: 'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?auto=format&fit=crop&w=800&q=80',
-    reporter: {
-      name: 'Harish Babu',
-      avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=256&q=80',
-    },
-    views: '3.1k views',
-    likes: 167,
-    commentsCount: 12,
-    locality: 'Double Road · Ward 113',
-    category: 'Roads',
-    postId: 'post-9',
-    description: 'Time-lapse video of rapid night-crew resurfacing after heavy community upvotes.',
-  },
-  {
-    id: 'vid-3',
-    title: 'Illegal Commercial Dumping Caught at Night Behind Bus Stand',
-    duration: '1:15',
-    thumbnail: 'https://images.unsplash.com/photo-1530587191325-3db32d826c18?auto=format&fit=crop&w=800&q=80',
-    reporter: {
-      name: 'Sunil Chhetri',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=80',
-    },
-    views: '2.4k views',
-    likes: 95,
-    commentsCount: 8,
-    locality: 'Cambridge Layout · Ward 111',
-    category: 'Sanitation',
-    postId: 'post-8',
-    description: 'Evidence footage of repeated nighttime commercial disposal into storm drains.',
-  },
-  {
-    id: 'vid-4',
-    title: 'Live Transformer Sparking Danger Near School Route',
-    duration: '0:34',
-    thumbnail: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80',
-    reporter: {
-      name: 'Nalini Chandran',
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=256&q=80',
-    },
-    views: '940 views',
-    likes: 188,
-    commentsCount: 16,
-    locality: 'Domlur Layout · Ward 114',
-    category: 'Public Safety',
-    postId: 'post-5',
-    description: 'Urgent video showing live unlatched high voltage box right beside the school sidewalk.',
-  },
-];
+const RECENT_KEY = 'jansevak_recent_searches';
+const loadRecent = (): string[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 6) : [];
+  } catch {
+    return [];
+  }
+};
+const saveRecent = (list: string[]) => {
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+  } catch {
+    /* storage unavailable: the list only lives for this visit */
+  }
+};
 
 interface ExploreGridItem {
   id: string;
-  type: 'photo' | 'multi_photo' | 'reel' | 'video';
+  type: 'photo' | 'multi_photo' | 'reel';
   thumbnail: string;
   title: string;
   upvotes: number;
   commentsCount: number;
   category: CivicCategory;
   isSpan2?: boolean;
-  duration?: string;
   postRef?: CivicPost;
   reelRef?: ReelStory;
-  videoRef?: CivicVideo;
 }
+
+type Filter = 'All' | 'Reels' | 'Photos' | 'Issues' | 'Resolved';
 
 export const SearchScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { posts, setSelectedPostForDetail, addToast } = useApp();
+  const { setSelectedPostForDetail } = useApp();
+
+  const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<Filter>('All');
+  const [recentSearches, setRecentSearches] = useState<string[]>(loadRecent);
+
+  // Live data: every tile comes from the server
   const [reels, setReels] = useState<ReelStory[]>([]);
+  const [issues, setIssues] = useState<CivicPost[]>([]);
+  const [trendBase, setTrendBase] = useState<CivicPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const requestId = useRef(0);
+
   useEffect(() => {
     getReels(1, false, 30)
       .then((r) => setReels(r.items.map(toReel)))
       .catch(() => setReels([]));
+    fetchIssues({ page_size: 100, sort: 'recent' })
+      .then((r) => setTrendBase(r.items.map(toCivicPost)))
+      .catch(() => setTrendBase([]));
   }, []);
 
-  const [query, setQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'All' | 'Reels' | 'Photos' | 'Videos' | 'Issues' | 'Resolved'>('All');
-  const [selectedVideo, setSelectedVideo] = useState<CivicVideo | null>(null);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebounced(query.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [query]);
 
-  const [recentSearches, setRecentSearches] = useState<string[]>([
-    '100ft road potholes',
-    'Water leakage HAL',
-    'Defense Colony park',
-    'Streetlight repair',
-  ]);
+  const wantsResolved = activeFilter === 'Resolved';
+  useEffect(() => {
+    const id = ++requestId.current;
+    setLoading(true);
+    setLoadError('');
+    fetchIssues({
+      page_size: 60,
+      sort: 'recent',
+      q: debounced || undefined,
+      category: category || undefined,
+      status: wantsResolved ? 'Resolved' : undefined,
+    })
+      .then((r) => {
+        if (id === requestId.current) setIssues(r.items.map(toCivicPost));
+      })
+      .catch((e: Error) => {
+        if (id === requestId.current) {
+          setIssues([]);
+          setLoadError(e.message || 'Could not load results.');
+        }
+      })
+      .finally(() => {
+        if (id === requestId.current) setLoading(false);
+      });
+  }, [debounced, category, wantsResolved]);
 
-  const trendingTopics = [
-    { tag: '#CleanIndiranagar', count: '142 reports', category: 'Sanitation' },
-    { tag: '#Ward112Potholes', count: '89 upvotes', category: 'Roads' },
-    { tag: '#CauveryWaterAlert', count: '64 updates', category: 'Water' },
-    { tag: '#PedestrianSafety12thMain', count: '310 votes', category: 'Community' },
-    { tag: '#SolarLightsDefenseColony', count: 'Resolved', category: 'Streetlights' },
-  ];
+  // Trending = the categories people are reporting and supporting most, from real reports
+  const trendingTopics = useMemo(() => {
+    const by = new Map<string, { reports: number; supporters: number }>();
+    trendBase.forEach((p) => {
+      const cur = by.get(p.category) || { reports: 0, supporters: 0 };
+      cur.reports += 1;
+      cur.supporters += p.upvotes;
+      by.set(p.category, cur);
+    });
+    return [...by.entries()]
+      .map(([cat, v]) => ({ category: cat, ...v, score: v.reports + v.supporters }))
+      .sort((x, y) => y.score - x.score)
+      .slice(0, 5);
+  }, [trendBase]);
+
+  const remember = useCallback((term: string) => {
+    const t = term.trim();
+    if (t.length < 2) return;
+    setRecentSearches((prev) => {
+      const next = [t, ...prev.filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, 6);
+      saveRecent(next);
+      return next;
+    });
+  }, []);
+
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
   // Build the complete Instagram Explore Grid items
   const exploreGridItems = useMemo(() => {
     const items: ExploreGridItem[] = [];
 
     // Add Posts / Photos
-    posts.forEach((post) => {
+    issues.forEach((post) => {
       const isMulti = Boolean(post.images && post.images.length > 1);
       items.push({
         id: `post-${post.id}`,
@@ -207,25 +188,10 @@ export const SearchScreen: React.FC = () => {
       });
     });
 
-    // Interleave Videos
-    CIVIC_VIDEOS.forEach((vid) => {
-      items.push({
-        id: `vid-${vid.id}`,
-        type: 'video',
-        thumbnail: vid.thumbnail,
-        title: vid.title,
-        upvotes: vid.likes,
-        commentsCount: vid.commentsCount,
-        category: vid.category,
-        duration: vid.duration,
-        videoRef: vid,
-      });
-    });
-
     // Assign Instagram Explore Mosaic pattern:
     // In every group of 5 items, give 1 reel or video a row-span-2 tall card
     return items.map((item, index) => {
-      const isReelOrVideo = item.type === 'reel' || item.type === 'video';
+      const isReelOrVideo = item.type === 'reel';
       // Mark specific items as tall 2-row tiles (index % 6 === 0 or index % 6 === 4)
       const isSpan2 = isReelOrVideo && (index % 5 === 0 || index % 5 === 2);
       return {
@@ -233,42 +199,33 @@ export const SearchScreen: React.FC = () => {
         isSpan2,
       };
     });
-  }, [posts, reels]);
+  }, [issues, reels]);
 
-  // Filter items based on activeFilter and query
+  // Posts are already filtered by the server (text, category, resolved). Reels are filtered here.
   const filteredGridItems = useMemo(() => {
     let result = exploreGridItems;
+    const q = debounced.toLowerCase();
 
-    // Filter by category / media type
-    if (activeFilter === 'Reels') {
-      result = result.filter((i) => i.type === 'reel');
-    } else if (activeFilter === 'Photos') {
-      result = result.filter((i) => i.type === 'photo' || i.type === 'multi_photo');
-    } else if (activeFilter === 'Videos') {
-      result = result.filter((i) => i.type === 'video');
-    } else if (activeFilter === 'Issues') {
-      result = result.filter((i) => i.postRef && i.postRef.status !== 'Resolved');
-    } else if (activeFilter === 'Resolved') {
-      result = result.filter((i) => i.postRef && i.postRef.status === 'Resolved');
-    }
+    result = result.filter((i) => {
+      if (i.type !== 'reel') return true;
+      if (category && i.category !== category) return false;
+      if (wantsResolved) return true; // every reel is a resolved issue
+      if (!q) return true;
+      const r = i.reelRef;
+      return `${i.title} ${i.category} ${r?.caption || ''} ${r?.locality || ''}`.toLowerCase().includes(q);
+    });
 
-    // Filter by search query
-    if (query.trim()) {
-      const q = query.toLowerCase().trim();
-      result = result.filter((item) => {
-        const text = `${item.title} ${item.category} ${item.postRef?.description || ''} ${item.reelRef?.caption || ''} ${item.videoRef?.description || ''}`.toLowerCase();
-        return text.includes(q);
-      });
-    }
-
+    if (activeFilter === 'Reels') result = result.filter((i) => i.type === 'reel');
+    else if (activeFilter === 'Photos') result = result.filter((i) => i.type === 'photo' || i.type === 'multi_photo');
+    else if (activeFilter === 'Issues') result = result.filter((i) => i.postRef && i.postRef.status !== 'Resolved');
+    else if (activeFilter === 'Resolved') result = result.filter((i) => i.type === 'reel' || i.postRef?.status === 'Resolved');
     return result;
-  }, [exploreGridItems, activeFilter, query]);
+  }, [exploreGridItems, activeFilter, debounced, category, wantsResolved]);
 
   const handleTileClick = (item: ExploreGridItem) => {
+    if (query.trim()) remember(query);
     if (item.type === 'reel') {
       navigate(item.reelRef ? `/positive-impact?story=${item.reelRef.id}` : '/positive-impact');
-    } else if (item.type === 'video' && item.videoRef) {
-      setSelectedVideo(item.videoRef);
     } else if (item.postRef) {
       setSelectedPostForDetail(item.postRef);
     }
@@ -276,15 +233,25 @@ export const SearchScreen: React.FC = () => {
 
   const handleSelectRecent = (term: string) => {
     setQuery(term);
+    setDebounced(term);
+    scrollToTop();
   };
 
-  const handleSelectTrending = (tag: string) => {
-    const clean = tag.replace('#', '').toLowerCase();
-    setQuery(clean);
+  const handleSelectTrending = (cat: string) => {
+    setCategory(cat);
+    setActiveFilter('All');
+    scrollToTop();
   };
 
   const handleClearQuery = () => {
     setQuery('');
+    setDebounced('');
+  };
+
+  const clearAll = () => {
+    handleClearQuery();
+    setCategory(null);
+    setActiveFilter('All');
   };
 
   return (
@@ -297,7 +264,10 @@ export const SearchScreen: React.FC = () => {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search photos, videos, reels, localities..."
+            onKeyDown={(e) => e.key === 'Enter' && remember(query)}
+            onBlur={() => remember(query)}
+            enterKeyHint="search"
+            placeholder="Search reports, places, reels..."
             className="w-full text-xs sm:text-[13px] bg-white border border-[#cbd5e1] rounded-2xl pl-10 pr-10 py-2.5 text-[#0f172a] focus:outline-none focus:border-[#0f2d59] focus:ring-1 focus:ring-[#0f2d59] shadow-xs transition-all placeholder:text-[#98A59E]"
           />
           {query && (
@@ -312,7 +282,7 @@ export const SearchScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Horizontal Filter Chips (All, Reels, Photos, Videos, Issues, Resolved) */}
+      {/* 2. Horizontal Filter Chips (All, Reels, Photos, Issues, Resolved) */}
       <div className="px-3 sm:px-4">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar select-none">
           {/* All */}
@@ -351,18 +321,6 @@ export const SearchScreen: React.FC = () => {
             <span>Photos</span>
           </button>
 
-          {/* Videos */}
-          <button
-            onClick={() => setActiveFilter('Videos')}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 transition-all border ${activeFilter === 'Videos'
-                ? 'bg-[#0f2d59] text-white border-[#0f2d59] shadow-xs'
-                : 'bg-white text-[#64748b] border-[#cbd5e1] hover:border-[#0f2d59]/30 hover:text-[#0f172a]'
-              }`}
-          >
-            <Video className="w-3.5 h-3.5 text-blue-600" />
-            <span>Videos</span>
-          </button>
-
           {/* Issues */}
           <button
             onClick={() => setActiveFilter('Issues')}
@@ -389,16 +347,26 @@ export const SearchScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Query Active Result Count */}
-      {query && (
-        <div className="px-3 sm:px-4 flex items-center justify-between text-xs text-[#64748b]">
-          <span>
-            Found <strong>{filteredGridItems.length}</strong> results for &ldquo;{query}&rdquo;
+      {/* Active search / category and live result count */}
+      {(debounced || category) && (
+        <div className="px-3 sm:px-4 flex items-center justify-between gap-2 text-xs text-[#64748b]" data-testid="result-line">
+          <span className="flex items-center gap-1.5 min-w-0 flex-wrap">
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+            <span>
+              {loading ? 'Searching' : <>Found <strong>{filteredGridItems.length}</strong> result{filteredGridItems.length === 1 ? '' : 's'}</>}
+              {debounced ? <> for &ldquo;{debounced}&rdquo;</> : null}
+            </span>
+            {category && (
+              <button
+                onClick={() => setCategory(null)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#0f2d59] text-white text-[10px] font-bold cursor-pointer"
+                aria-label={`Remove ${category} filter`}
+              >
+                {category} <X className="w-3 h-3" />
+              </button>
+            )}
           </span>
-          <button
-            onClick={handleClearQuery}
-            className="text-[#0f2d59] font-semibold hover:underline"
-          >
+          <button onClick={clearAll} className="text-[#0f2d59] font-semibold hover:underline shrink-0 cursor-pointer">
             Clear
           </button>
         </div>
@@ -409,9 +377,15 @@ export const SearchScreen: React.FC = () => {
         {filteredGridItems.length === 0 ? (
           <div className="mx-3 sm:mx-4 p-8 text-center bg-white rounded-3xl border border-[#cbd5e1] space-y-2 mt-2">
             <Search className="w-8 h-8 text-[#98A59E] mx-auto" />
-            <p className="text-xs font-bold text-[#0f172a]">No media found</p>
+            <p className="text-xs font-bold text-[#0f172a]">
+              {loading ? 'Searching…' : loadError ? 'Could not load results' : debounced || category ? 'No reports match' : 'Nothing here yet'}
+            </p>
             <p className="text-[11px] text-[#64748b]">
-              Try searching for &quot;water&quot;, &quot;road&quot;, &quot;sanitation&quot;, or clear filters.
+              {loadError
+                ? loadError
+                : debounced || category
+                  ? 'Try a different word, or clear the search.'
+                  : 'Reports and impact stories from your community will show up here.'}
             </p>
           </div>
         ) : (
@@ -441,13 +415,6 @@ export const SearchScreen: React.FC = () => {
                   {item.type === 'reel' && (
                     <div className="bg-black/55 backdrop-blur-xs text-white p-1 rounded-md flex items-center justify-center">
                       <PlaySquare className="w-3.5 h-3.5" />
-                    </div>
-                  )}
-
-                  {item.type === 'video' && (
-                    <div className="bg-black/65 backdrop-blur-xs text-white px-1.5 py-0.5 rounded-md flex items-center gap-1 text-[9px] font-bold">
-                      <Video className="w-3 h-3 text-white" />
-                      {item.duration && <span>{item.duration}</span>}
                     </div>
                   )}
 
@@ -494,7 +461,10 @@ export const SearchScreen: React.FC = () => {
                 Recent Searches
               </span>
               <button
-                onClick={() => setRecentSearches([])}
+                onClick={() => {
+                  setRecentSearches([]);
+                  saveRecent([]);
+                }}
                 className="text-[10px] text-[#64748b] hover:text-[#0f172a]"
               >
                 Clear
@@ -514,136 +484,40 @@ export const SearchScreen: React.FC = () => {
           </div>
         )}
 
-        {/* Trending Community Topics */}
-        <div className="bg-white rounded-2xl p-3.5 border border-[#cbd5e1] shadow-xs">
-          <div className="flex items-center justify-between mb-2.5">
-            <span className="text-xs font-bold text-[#0f172a] flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5 text-[#0f2d59]" />
-              Trending Around Ward 112
-            </span>
-            <span className="text-[10px] text-[#0f2d59] font-bold">Live Pulse</span>
-          </div>
+        {/* Trending: categories people are reporting and supporting most right now (live) */}
+        {trendingTopics.length > 0 && (
+          <div className="bg-white rounded-2xl p-3.5 border border-[#cbd5e1] shadow-xs" data-testid="trending">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-xs font-bold text-[#0f172a] flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-[#0f2d59]" />
+                Trending on JanSevak
+              </span>
+              <span className="text-[10px] text-[#0f2d59] font-bold">Live from reports</span>
+            </div>
 
-          <div className="space-y-1.5">
-            {trendingTopics.map((topic, idx) => (
-              <button
-                key={topic.tag}
-                onClick={() => handleSelectTrending(topic.tag)}
-                className="w-full text-left p-2 rounded-xl hover:bg-[#f8fafc] border border-transparent hover:border-[#cbd5e1] transition-all flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xs font-bold text-[#64748b] tabular-nums">
-                    {idx + 1}
-                  </span>
-                  <div>
-                    <p className="text-xs font-bold text-[#0f172a] group-hover:text-[#0f2d59] transition-colors">
-                      {topic.tag}
-                    </p>
-                    <span className="text-[10px] text-[#64748b]">
-                      {topic.category} · {topic.count}
-                    </span>
+            <div className="space-y-1.5">
+              {trendingTopics.map((topic, idx) => (
+                <button
+                  key={topic.category}
+                  onClick={() => handleSelectTrending(topic.category)}
+                  className="w-full text-left p-2 rounded-xl hover:bg-[#f8fafc] border border-transparent hover:border-[#cbd5e1] transition-all flex items-center justify-between group cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs font-bold text-[#64748b] tabular-nums">{idx + 1}</span>
+                    <div>
+                      <p className="text-xs font-bold text-[#0f172a] group-hover:text-[#0f2d59] transition-colors">#{topic.category.replace(/\s+/g, '')}</p>
+                      <span className="text-[10px] text-[#64748b]">
+                        {topic.reports} report{topic.reports === 1 ? '' : 's'} · {topic.supporters} supporter{topic.supporters === 1 ? '' : 's'}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-[#64748b] group-hover:text-[#0f2d59] group-hover:translate-x-0.5 transition-all" />
-              </button>
-            ))}
+                  <ChevronRight className="w-3.5 h-3.5 text-[#64748b] group-hover:text-[#0f2d59] group-hover:translate-x-0.5 transition-all" />
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
-
-      {/* Interactive Video Player Modal */}
-      {selectedVideo && (
-        <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setSelectedVideo(null)}
-        >
-          <div
-            className="w-full max-w-md bg-[#0f172a] rounded-3xl overflow-hidden shadow-2xl border border-white/15 text-white flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Video Player Display */}
-            <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
-              <img
-                src={selectedVideo.thumbnail}
-                alt={selectedVideo.title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                <div className="w-14 h-14 rounded-full bg-[#0f2d59] text-white flex items-center justify-center shadow-lg animate-pulse">
-                  <Play className="w-6 h-6 fill-current ml-1" />
-                </div>
-              </div>
-
-              {/* Top controls */}
-              <button
-                onClick={() => setSelectedVideo(null)}
-                className="absolute top-3 right-3 p-1.5 rounded-full bg-black/60 text-white hover:bg-black/90 transition-colors"
-                title="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              <span className="absolute bottom-3 left-3 bg-black/60 px-2 py-0.5 rounded text-[10px] font-bold text-white flex items-center gap-1">
-                <Volume2 className="w-3 h-3 text-emerald-400" /> Live Audio
-              </span>
-              <span className="absolute bottom-3 right-3 bg-black/60 px-2 py-0.5 rounded text-[10px] font-bold text-white">
-                {selectedVideo.duration}
-              </span>
-            </div>
-
-            {/* Video Details */}
-            <div className="p-4 space-y-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedVideo(null);
-                  navigate('/profile');
-                }}
-                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-85 transition-opacity"
-                title={`View profile for ${selectedVideo.reporter.name}`}
-              >
-                <img
-                  src={selectedVideo.reporter.avatar}
-                  alt={selectedVideo.reporter.name}
-                  className="w-8 h-8 rounded-full object-cover border border-white/20"
-                />
-                <div>
-                  <span className="text-xs font-bold block hover:underline">{selectedVideo.reporter.name}</span>
-                  <span className="text-[10px] text-gray-400">{selectedVideo.locality}</span>
-                </div>
-              </button>
-
-              <h3 className="text-sm font-bold leading-snug">{selectedVideo.title}</h3>
-              <p className="text-xs text-gray-300 leading-relaxed">{selectedVideo.description}</p>
-
-              <div className="flex items-center justify-between pt-2 border-t border-white/10 text-xs text-gray-300">
-                <span className="text-emerald-400 font-bold">{selectedVideo.views}</span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      addToast('Video Upvoted!', 'Thank you for endorsing community evidence.', 'success');
-                    }}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-semibold transition-colors"
-                  >
-                    <ThumbsUp className="w-3.5 h-3.5" />
-                    <span>{selectedVideo.likes}</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard?.writeText?.(window.location.href);
-                      addToast('Video link copied!', undefined, 'info');
-                    }}
-                    className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
-                    title="Share video"
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

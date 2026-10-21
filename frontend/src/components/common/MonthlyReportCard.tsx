@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FileDown, Printer, Loader2, CalendarDays } from 'lucide-react';
 import { fetchMonthlyReport, ApiError, type MonthlyReport } from '../../lib/api';
 import { buildMonthlyReportHtml } from '../../lib/monthlyReport';
+import { ReportShareCard } from './ReportShareCard';
 
 const lastMonths = (n: number) => {
   const out: { value: string; label: string }[] = [];
@@ -122,6 +123,9 @@ export const MonthlyReportCard: React.FC = () => {
             <button onClick={print} className="flex-1 py-2.5 rounded-xl bg-[#0f2d59] text-white text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-[#1d4e8c]">
               <Printer className="w-3.5 h-3.5" /> Print / Save PDF
             </button>
+          </div>
+          <div className="border-t border-[#e2e8f0] pt-3">
+            <ReportShareCard report={report} />
           </div>
         </div>
       )}

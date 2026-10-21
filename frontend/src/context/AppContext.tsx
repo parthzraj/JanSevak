@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, startTransition, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   CivicPost,
   DailyBriefing,
@@ -133,26 +133,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved === 'dark' ? 'dark' : 'light';
   });
 
+  // Flip the theme in one go: turn CSS transitions off for a moment so hundreds of elements do not
+  // animate their colours at once (that is what made the switch feel laggy), then re-enable them.
+  const applyThemeClass = (t: 'light' | 'dark') => {
+    const root = document.documentElement;
+    root.classList.add('theme-switching');
+    root.classList.toggle('dark', t === 'dark');
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
+  };
+
   const setTheme = (newTheme: 'light' | 'dark') => {
-    setThemeState(newTheme);
-    localStorage.setItem('jansevak_theme', newTheme);
-    if (newTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    applyThemeClass(newTheme); // the page repaints immediately
+    startTransition(() => setThemeState(newTheme)); // icons and state catch up without blocking it
+    try {
+      localStorage.setItem('jansevak_theme', newTheme);
+    } catch {
+      /* private mode: the theme just will not be remembered */
     }
   };
 
   const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
+    setTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark');
   };
 
   useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', theme === 'dark'); // first load
   }, [theme]);
 
   // Authentication State
@@ -190,9 +195,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [briefing] = useState<DailyBriefing>(INITIAL_BRIEFING);
 
   // Daily Briefing Acknowledged State (per day)
-  const getBriefingKey = (date: Date = new Date(), userId = user.id) => {
+  const getBriefingKey = (date: Date = new Date()) => {
     const today = date;
-    return `praja_briefing_ack_${userId}_${today.getFullYear()}_${today.getMonth() + 1}_${today.getDate()}`;
+    return `praja_briefing_ack_${today.getFullYear()}_${today.getMonth() + 1}_${today.getDate()}`;
   };
 
   const [isBriefingAcknowledged, setIsBriefingAcknowledged] = useState<boolean>(() => {
@@ -218,7 +223,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshBriefingState();
     const refreshTimer = window.setInterval(refreshBriefingState, 30_000);
     return () => window.clearInterval(refreshTimer);
-  }, [user.id]);
+  }, []);
 
   const acknowledgeBriefing = useCallback(() => {
     try {
@@ -227,7 +232,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // The in-memory state still keeps the acknowledgement for this session.
     }
     setIsBriefingAcknowledged(true);
-  }, [user.id]);
+  }, []);
 
   const resetBriefingAcknowledgment = useCallback(() => {
     try {
@@ -236,7 +241,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Keep the in-memory state reset even if storage is unavailable.
     }
     setIsBriefingAcknowledged(false);
-  }, [user.id]);
+  }, []);
 
   const isBriefingAvailable = currentTime.getHours() >= 7;
 
