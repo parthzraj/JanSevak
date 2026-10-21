@@ -12,15 +12,17 @@ import {
   Sunrise,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useMyBadges } from '../lib/profileApi';
 import { CityBriefingModal, useCityBriefingAi } from '../components/feed/DailyBriefingCard';
 
 export const MenuScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { badges, user, posts, isBriefingAvailable, isBriefingAcknowledged } = useApp();
+  const { user, posts, isBriefingAvailable, isBriefingAcknowledged } = useApp();
   const [showBriefingModal, setShowBriefingModal] = useState(false);
   const { top3Issues } = useCityBriefingAi(posts);
 
-  const unlockedBadgesCount = badges ? badges.filter((b) => b.isUnlocked).length : 4;
+  const { badges: earnedBadges } = useMyBadges(user.points);
+  const unlockedBadgesCount = earnedBadges.length;
 
   return (
     <div className="flex-1 flex flex-col px-3.5 sm:px-4 pt-3 pb-12 space-y-4 max-w-2xl mx-auto w-full select-none">

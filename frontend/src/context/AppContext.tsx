@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, startTransition, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   CivicPost,
   DailyBriefing,
@@ -133,26 +133,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved === 'dark' ? 'dark' : 'light';
   });
 
+  // Flip the theme in one go: turn CSS transitions off for a moment so hundreds of elements do not
+  // animate their colours at once (that is what made the switch feel laggy), then re-enable them.
+  const applyThemeClass = (t: 'light' | 'dark') => {
+    const root = document.documentElement;
+    root.classList.add('theme-switching');
+    root.classList.toggle('dark', t === 'dark');
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
+  };
+
   const setTheme = (newTheme: 'light' | 'dark') => {
-    setThemeState(newTheme);
-    localStorage.setItem('jansevak_theme', newTheme);
-    if (newTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    applyThemeClass(newTheme); // the page repaints immediately
+    startTransition(() => setThemeState(newTheme)); // icons and state catch up without blocking it
+    try {
+      localStorage.setItem('jansevak_theme', newTheme);
+    } catch {
+      /* private mode: the theme just will not be remembered */
     }
   };
 
   const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
+    setTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark');
   };
 
   useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', theme === 'dark'); // first load
   }, [theme]);
 
   // Authentication State

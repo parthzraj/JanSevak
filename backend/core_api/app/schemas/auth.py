@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Literal
 
+import re
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
@@ -47,6 +49,43 @@ class UserUpdate(BaseModel):
     ward: str | None = Field(default=None, max_length=80)
     # "preset:<key>" (built-in illustration), a "/uploads/..." photo, or "" to go back to the initials avatar
     avatar_url: str | None = Field(default=None, max_length=255)
+    # Optional details. An empty string clears the field.
+    phone: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(default=None, max_length=255)
+    city: str | None = Field(default=None, max_length=80)
+    pincode: str | None = Field(default=None, max_length=6)
+    bio: str | None = Field(default=None, max_length=280)
+
+    @field_validator("phone")
+    @classmethod
+    def _phone(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        digits = re.sub(r"[\s\-()]", "", v.strip())
+        if digits == "":
+            return ""
+        if digits.startswith("+91"):
+            digits = digits[3:]
+        elif digits.startswith("0") and len(digits) == 11:
+            digits = digits[1:]
+        if not re.fullmatch(r"[6-9]\d{9}", digits):
+            raise ValueError("Enter a valid 10-digit Indian mobile number")
+        return digits
+
+    @field_validator("pincode")
+    @classmethod
+    def _pincode(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if v and not re.fullmatch(r"[1-9]\d{5}", v):
+            raise ValueError("PIN code must be 6 digits")
+        return v
+
+    @field_validator("address", "city", "bio")
+    @classmethod
+    def _trim(cls, v: str | None) -> str | None:
+        return v.strip() if isinstance(v, str) else v
 
     @field_validator("avatar_url")
     @classmethod
@@ -68,6 +107,11 @@ class UserResponse(BaseModel):
     email: str
     ward: str | None = None
     avatar_url: str | None = None
+    phone: str | None = None
+    address: str | None = None
+    city: str | None = None
+    pincode: str | None = None
+    bio: str | None = None
     role: str
     points: int
     tier: str
@@ -93,6 +137,7 @@ class PublicUserResponse(BaseModel):
     name: str
     ward: str | None = None
     avatar_url: str | None = None
+    bio: str | None = None
     role: str
     points: int
     tier: str

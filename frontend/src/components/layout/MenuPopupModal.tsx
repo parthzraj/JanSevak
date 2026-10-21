@@ -11,6 +11,7 @@ import {
   Sunrise,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useMyBadges } from '../../lib/profileApi';
 import { CityBriefingModal, useCityBriefingAi } from '../feed/DailyBriefingCard';
 
 export const MenuPopupModal: React.FC = () => {
@@ -18,7 +19,6 @@ export const MenuPopupModal: React.FC = () => {
   const {
     isMenuPopupOpen,
     setIsMenuPopupOpen,
-    badges,
     user,
     posts,
     isBriefingAvailable,
@@ -27,7 +27,8 @@ export const MenuPopupModal: React.FC = () => {
   const [showBriefingModal, setShowBriefingModal] = React.useState(false);
   const { top3Issues } = useCityBriefingAi(posts);
 
-  const unlockedBadgesCount = badges ? badges.filter((b) => b.isUnlocked).length : 4;
+  const { badges: earnedBadges } = useMyBadges(user.points);
+  const unlockedBadgesCount = earnedBadges.length;
 
   // Handle escape key to dismiss
   useEffect(() => {

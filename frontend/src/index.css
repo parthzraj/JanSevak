@@ -324,3 +324,10 @@ a:active,
 .animate-profile-drawer {
   animation: profileDrawerSlide 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+/* Set for a moment while the theme flips so nothing animates its colours (see setTheme in AppContext) */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+}

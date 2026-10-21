@@ -73,6 +73,13 @@ def _add_missing_columns() -> None:
     from sqlalchemy import inspect, text
 
     wanted = {
+        "users": [
+            ("phone", "VARCHAR(20)"),
+            ("address", "VARCHAR(255)"),
+            ("city", "VARCHAR(80)"),
+            ("pincode", "VARCHAR(6)"),
+            ("bio", "VARCHAR(280)"),
+        ],
         "issue_evidence": [("image_hash", "VARCHAR(16)")],
         "civic_issues": [
             ("deleted_at", "DATETIME"),

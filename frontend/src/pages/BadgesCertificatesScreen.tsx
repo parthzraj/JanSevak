@@ -28,10 +28,13 @@ import {
 } from '../components/common/PrajaCertificateCard';
 import { PRINT_CSS, toPrajaCertificate, verifyLink } from '../components/academy/CertificateModal';
 import { fetchMyCertificates } from '../lib/academyApi';
+import { useMyBadges, useWallet } from '../lib/profileApi';
 
 export const BadgesCertificatesScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { badges, user, addToast } = useApp();
+  const { user, addToast } = useApp();
+  const { badges, loading: badgesLoading } = useMyBadges(user.points);
+  const wallet = useWallet(user.points);
 
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'rewards' | 'certificates'>(
@@ -90,19 +93,14 @@ export const BadgesCertificatesScreen: React.FC = () => {
           Rewards & Certificate
         </h1>
 
-        {/* Decorative Leaf Icon */}
-        <div className="w-6 h-6 flex items-center justify-end text-[#2E8B56]">
-          <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-            <path d="M17 8C8 10 5.9 16.17 3.82 21.34L5.71 22l1-2.3A4.49 4.49 0 0 0 8 20C19 20 22 3 22 3c-1 2-8 2.25-13 3.25S2 11.5 2 13.5s1.75 3.75 1.75 3.75C7 8 17 8 17 8z" />
-          </svg>
-        </div>
+        <div className="w-6 h-6" aria-hidden />
       </div>
 
       {/* ============================================================ */}
       {/* 2. CAPSULE SWITCHER (rewards | certificates)                 */}
       {/* ============================================================ */}
       <div className="flex justify-center -mt-1 pb-1">
-        <div className="bg-[#123A25] p-1 rounded-full inline-flex items-center gap-1 shadow-sm">
+        <div className="bg-[#e2e8f0] dark:bg-slate-800 p-1 rounded-full inline-flex items-center gap-1">
           {([
             { id: 'rewards', label: 'Rewards', Icon: Award },
             { id: 'certificates', label: 'Certificates', Icon: FileText },
@@ -111,8 +109,8 @@ export const BadgesCertificatesScreen: React.FC = () => {
               key={id}
               onClick={() => setActiveTab(id)}
               className={`px-4 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer ${activeTab === id
-                  ? 'bg-[#247A50] text-white shadow-xs'
-                  : 'text-emerald-200/70 hover:text-white'
+                  ? 'bg-[#0f2d59] text-white shadow-xs'
+                  : 'text-[#475569] dark:text-slate-300 hover:text-[#0f2d59] dark:hover:text-white'
                 }`}
             >
               <Icon className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -132,12 +130,12 @@ export const BadgesCertificatesScreen: React.FC = () => {
             <CivicLevelSpeedometer
               userPoints={user.points}
               userLevel={user.level}
-              theme="green"
+              theme="blue"
             />
           </div>
 
           {/* 4. REDEEMABLE POINTS BANNER (Exact Match from Mockup) */}
-          <div className="bg-gradient-to-r from-[#175E3B] via-[#1E6B45] to-[#257C51] text-white rounded-3xl p-4 sm:p-5 shadow-md relative overflow-hidden flex items-center justify-between gap-3 border border-[#1d4e8c]/40">
+          <div className="bg-gradient-to-r from-[#0a1e38] via-[#0f2d59] to-[#1d4e8c] text-white rounded-3xl p-4 sm:p-5 shadow-md relative overflow-hidden flex items-center justify-between gap-3 border border-[#1d4e8c]/40">
             {/* Subtle background foliage watermark */}
             <div className="absolute -left-4 -bottom-6 w-24 h-24 bg-white/5 rounded-full blur-xl pointer-events-none" />
             <div className="absolute right-12 top-0 w-32 h-32 bg-white/5 rounded-full blur-2xl pointer-events-none" />
@@ -149,18 +147,18 @@ export const BadgesCertificatesScreen: React.FC = () => {
 
             {/* Center: Redeemable Points Info */}
             <div className="flex-1 min-w-0 pl-1">
-              <span className="text-[10px] sm:text-[11px] font-bold tracking-widest text-[#A7F3D0] uppercase block">
+              <span className="text-[10px] sm:text-[11px] font-bold tracking-widest text-blue-200 uppercase block">
                 Redeemable Points
               </span>
               <div className="flex items-baseline gap-1 mt-0.5">
                 <span className="text-2xl sm:text-3xl font-black text-white tabular-nums tracking-tight">
                   {redeem.points}
                 </span>
-                <span className="text-xl sm:text-2xl font-bold text-[#A7F3D0]/90 tabular-nums">
+                <span className="text-xl sm:text-2xl font-bold text-blue-200/90 tabular-nums">
                   / {MIN_WITHDRAWAL_POINTS}
                 </span>
               </div>
-              <span className="text-[11px] font-semibold text-[#A7F3D0] block mt-0.5">
+              <span className="text-[11px] font-semibold text-blue-200 block mt-0.5">
                 Worth {formatRupees(redeem.rupees)} {'\u00B7'} {redeem.meetsMinimum ? 'withdrawal unlocked' : `min ${formatRupees(100)}`}
               </span>
             </div>
@@ -168,22 +166,61 @@ export const BadgesCertificatesScreen: React.FC = () => {
             {/* Right: Circular Arrow Action Button */}
             <button
               onClick={() => setShowRedeem(true)}
-              className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white text-[#175E3B] flex items-center justify-center shrink-0 shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white text-[#0f2d59] flex items-center justify-center shrink-0 shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer"
               aria-label="Redeemable Points Info"
             >
               <ArrowRight className="w-5 h-5 stroke-[2.5]" />
             </button>
           </div>
 
-          {/* 5. MY BADGES: first three, "View all" expands the full list in place */}
-          <div className="space-y-2.5 pt-1">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-sm sm:text-base font-black text-[#0f172a] dark:text-white tracking-tight">
-                My Badges
-                <span className="ml-2 text-[11px] font-bold text-[#64748b] dark:text-slate-400">
-                  {badges.filter((b) => b.isUnlocked).length}/{badges.length} unlocked
+          {/* 5. TODAY'S POINTS + RECENT ACTIVITY (live from the rewards ledger) */}
+          {wallet && (
+            <div className="bg-white dark:bg-[#111c2e] rounded-3xl p-4 border border-[#cbd5e1] dark:border-slate-800 shadow-xs space-y-3" data-testid="wallet-card">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-black text-[#0f172a] dark:text-white">Today</h2>
+                <span className="text-[11px] font-bold text-[#64748b] dark:text-slate-400">
+                  {wallet.points_today} / {wallet.daily_cap} daily points
                 </span>
-              </h2>
+              </div>
+              <div className="h-2 rounded-full bg-[#e2e8f0] dark:bg-slate-700 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[#0f2d59] dark:bg-blue-500"
+                  style={{ width: `${Math.min(100, Math.round((wallet.points_today / Math.max(1, wallet.daily_cap)) * 100))}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-[#64748b] dark:text-slate-400">
+                {wallet.remaining_today > 0
+                  ? `You can still earn ${wallet.remaining_today} points today.`
+                  : 'Daily limit reached. It resets tomorrow.'}
+                {wallet.next_tier ? ` ${wallet.points_to_next_tier} points to ${wallet.next_tier}.` : ' You are at the top level.'}
+              </p>
+              {wallet.recent_transactions.length > 0 ? (
+                <ul className="divide-y divide-[#e2e8f0] dark:divide-slate-800">
+                  {wallet.recent_transactions.slice(0, 4).map((t) => (
+                    <li key={t.id} className="flex items-center justify-between gap-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-[#0f172a] dark:text-white truncate">{t.description || t.action_type.replace(/_/g, ' ')}</p>
+                        <p className="text-[10px] text-[#64748b] dark:text-slate-400">
+                          {new Date(t.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        </p>
+                      </div>
+                      <span className={`text-xs font-black tabular-nums ${t.points < 0 ? 'text-rose-600' : 'text-[#0f2d59] dark:text-blue-300'}`}>
+                        {t.points > 0 ? '+' : ''}
+                        {t.points}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-[#64748b] dark:text-slate-400">No points yet. File a report or join a drive to get started.</p>
+              )}
+            </div>
+          )}
+
+          {/* 6. MY BADGES: only badges really earned. "View all" shows every one of them. */}
+          <div className="space-y-2.5 pt-1" data-testid="my-badges">
+            <div className="flex items-center justify-between px-1">
+              <h2 className="text-sm sm:text-base font-black text-[#0f172a] dark:text-white tracking-tight">My Badges</h2>
               {badges.length > 3 && (
                 <button
                   onClick={() => setShowAllBadges((v) => !v)}
@@ -195,31 +232,30 @@ export const BadgesCertificatesScreen: React.FC = () => {
               )}
             </div>
 
+            {!badgesLoading && badges.length === 0 && (
+              <div className="bg-white dark:bg-[#111c2e] rounded-3xl border border-dashed border-[#cbd5e1] dark:border-slate-700 p-6 text-center space-y-1">
+                <Award className="w-8 h-8 text-[#94a3b8] mx-auto" />
+                <p className="text-sm font-extrabold text-[#0f172a] dark:text-white">No badges yet</p>
+                <p className="text-xs text-[#64748b] dark:text-slate-400">Badges appear here as you report issues, join drives and earn points.</p>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              {[...badges]
-                .sort((a, b) => Number(b.isUnlocked) - Number(a.isUnlocked))
-                .slice(0, showAllBadges ? badges.length : 3)
-                .map((badge) => (
-                  <div
-                    key={badge.id}
-                    onClick={() => setSelectedBadge(badge.id)}
-                    className={`rounded-3xl p-3 sm:p-3.5 text-center flex flex-col items-center border shadow-2xs hover:shadow-xs transition-all cursor-pointer group ${
-                      badge.isUnlocked
-                        ? 'bg-[#EAF6EE] dark:bg-[#062c19]/70 border-emerald-100/80 dark:border-emerald-800/60'
-                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
-                    }`}
-                  >
-                    <div className={`group-hover:scale-105 transition-transform ${badge.isUnlocked ? '' : 'grayscale opacity-60'}`}>
-                      <CivicBadgeIcon badgeId={badge.id} size={56} />
-                    </div>
-                    <h3 className="text-xs font-extrabold text-[#0f172a] dark:text-emerald-100 mt-2 leading-tight">
-                      {badge.name}
-                    </h3>
-                    <span className="text-[10px] text-[#64748b] dark:text-emerald-300/80 mt-0.5 leading-tight line-clamp-2">
-                      {badge.isUnlocked ? badge.requirement : `${badge.progress}% there`}
-                    </span>
+              {badges.slice(0, showAllBadges ? badges.length : 3).map((badge) => (
+                <button
+                  key={badge.id}
+                  onClick={() => setSelectedBadge(badge.id)}
+                  className="rounded-3xl p-3 sm:p-3.5 text-center flex flex-col items-center border bg-white dark:bg-[#111c2e] border-[#cbd5e1] dark:border-slate-800 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
+                >
+                  <div className="group-hover:scale-105 transition-transform">
+                    <CivicBadgeIcon badgeId={badge.id} size={56} />
                   </div>
-                ))}
+                  <h3 className="text-xs font-extrabold text-[#0f172a] dark:text-white mt-2 leading-tight">{badge.name}</h3>
+                  <span className="text-[10px] text-[#64748b] dark:text-slate-400 mt-0.5 leading-tight line-clamp-2">
+                    {new Date(badge.earned_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -395,13 +431,9 @@ export const BadgesCertificatesScreen: React.FC = () => {
                     <strong className="text-[#0f172a] dark:text-white">{badge.requirement}</strong>
                   </div>
                   <div className="flex items-center justify-between text-[#64748b] dark:text-slate-400">
-                    <span>Status</span>
-                    <strong
-                      className={
-                        badge.isUnlocked ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'
-                      }
-                    >
-                      {badge.isUnlocked ? '✓ Unlocked' : 'In Progress'}
+                    <span>Earned on</span>
+                    <strong className="text-emerald-700 dark:text-emerald-400">
+                      {new Date(badge.earned_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </strong>
                   </div>
                 </div>
