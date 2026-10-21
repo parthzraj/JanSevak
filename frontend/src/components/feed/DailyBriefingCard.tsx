@@ -1,21 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Star,
-  ArrowRight,
   Sunrise,
-  Calendar,
-  X,
+  MapPin,
+  ArrowUpRight,
+  ChevronUp,
+  ChevronDown,
+  CheckCircle2,
   Droplets,
   Truck,
   Leaf,
-  CheckCircle2,
-  Sparkles,
-  Trophy,
-  ChevronRight,
-  AlertCircle,
   Lightbulb,
   Shield,
   Users,
+  Sparkles,
+  X,
+  Flame,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { prioritizeFeed } from '../../lib/api';
@@ -24,20 +23,30 @@ import { CivicPost } from '../../types';
 export const getCategoryIcon = (category: string) => {
   switch (category) {
     case 'Water':
-      return <Droplets className="w-3.5 h-3.5 text-blue-600" />;
+      return <Droplets className="w-3.5 h-3.5 text-blue-400" />;
     case 'Roads':
-      return <Truck className="w-3.5 h-3.5 text-amber-600" />;
+      return <Truck className="w-3.5 h-3.5 text-amber-400" />;
     case 'Sanitation':
-      return <Leaf className="w-3.5 h-3.5 text-emerald-600" />;
+      return <Leaf className="w-3.5 h-3.5 text-emerald-400" />;
     case 'Streetlights':
-      return <Lightbulb className="w-3.5 h-3.5 text-yellow-600" />;
+      return <Lightbulb className="w-3.5 h-3.5 text-yellow-400" />;
     case 'Public Safety':
-      return <Shield className="w-3.5 h-3.5 text-red-600" />;
+      return <Shield className="w-3.5 h-3.5 text-red-400" />;
     case 'Community':
-      return <Users className="w-3.5 h-3.5 text-indigo-600" />;
+      return <Users className="w-3.5 h-3.5 text-indigo-400" />;
     default:
-      return <Sparkles className="w-3.5 h-3.5 text-[#0f2d59]" />;
+      return <Sparkles className="w-3.5 h-3.5 text-amber-400" />;
   }
+};
+
+const FALLBACK_CATEGORY_IMAGES: Record<string, string> = {
+  Roads: 'https://images.unsplash.com/photo-1541888946425-d0fbb186156f?auto=format&fit=crop&w=800&q=80',
+  Water: 'https://images.unsplash.com/photo-1578991624414-276ef23a534f?auto=format&fit=crop&w=800&q=80',
+  Sanitation: 'https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?auto=format&fit=crop&w=800&q=80',
+  Streetlights: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=800&q=80',
+  'Public Safety': 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80',
+  Parks: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=800&q=80',
+  Community: 'https://images.unsplash.com/photo-1530587191325-3db32d826c18?auto=format&fit=crop&w=800&q=80',
 };
 
 /**
@@ -116,6 +125,360 @@ export function useCityBriefingAi(posts: CivicPost[]) {
   return { top3Issues, isLoadingAi };
 }
 
+interface FlashCardDeckProps {
+  issues: CivicPost[];
+  isLoading: boolean;
+  onSelectIssue: (issue: CivicPost) => void;
+  onAcknowledge?: () => void;
+  showAcknowledgeButton?: boolean;
+}
+
+/**
+ * 3D Stacked Flash Card Component matching the user reference.
+ * 3 cards layered in 3D perspective with rounded corners, photo background, and scroll/swipe animation.
+ */
+export const FlashCardDeck: React.FC<FlashCardDeckProps> = ({
+  issues,
+  isLoading,
+  onSelectIssue,
+  onAcknowledge,
+  showAcknowledgeButton = true,
+}) => {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animDirection, setAnimDirection] = useState<'up' | 'down'>('up');
+  const touchStartY = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const total = issues.length > 0 ? issues.length : 3;
+
+  const nextCard = useCallback(() => {
+    if (isAnimating || total <= 1) return;
+    setAnimDirection('up');
+    setIsAnimating(true);
+    setTimeout(() => {
+      setActiveIndex((prev) => (prev + 1) % total);
+      setIsAnimating(false);
+    }, 420);
+  }, [isAnimating, total]);
+
+  const prevCard = useCallback(() => {
+    if (isAnimating || total <= 1) return;
+    setAnimDirection('down');
+    setIsAnimating(true);
+    setTimeout(() => {
+      setActiveIndex((prev) => (prev - 1 + total) % total);
+      setIsAnimating(false);
+    }, 420);
+  }, [isAnimating, total]);
+
+  const handleWheel = (e: React.WheelEvent) => {
+    // Only capture vertical scroll gestures on the deck
+    if (Math.abs(e.deltaY) > 18) {
+      if (e.deltaY > 0) {
+        nextCard();
+      } else {
+        prevCard();
+      }
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartY.current === null) return;
+    const deltaY = touchStartY.current - e.changedTouches[0].clientY;
+    if (deltaY > 35) {
+      nextCard(); // swiped upward
+    } else if (deltaY < -35) {
+      prevCard(); // swiped downward
+    }
+    touchStartY.current = null;
+  };
+
+  if (isLoading && issues.length === 0) {
+    return (
+      <div className="w-full h-[360px] rounded-[28px] bg-slate-900 border border-slate-800 flex flex-col items-center justify-center space-y-3 p-6 text-white shadow-xl">
+        <span className="w-8 h-8 border-3 border-amber-400 border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs font-bold text-slate-300">
+          AI is prioritizing today's top 3 civic redressals...
+        </span>
+      </div>
+    );
+  }
+
+  const rankBadges = [
+    { label: '#1 Highest Urgency', color: 'bg-red-500/90 text-white border-red-400/40' },
+    { label: '#2 Critical Safety', color: 'bg-orange-500/90 text-white border-orange-400/40' },
+    { label: '#3 Municipal Priority', color: 'bg-amber-500/90 text-white border-amber-400/40' },
+  ];
+
+  return (
+    <div className="space-y-3 select-none">
+      {/* Deck Controls & Progress Indicator */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-1.5">
+          {issues.map((_, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => {
+                if (!isAnimating && idx !== activeIndex) {
+                  setAnimDirection(idx > activeIndex ? 'up' : 'down');
+                  setIsAnimating(true);
+                  setTimeout(() => {
+                    setActiveIndex(idx);
+                    setIsAnimating(false);
+                  }, 420);
+                }
+              }}
+              className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                activeIndex === idx
+                  ? 'w-7 bg-amber-400 shadow-xs'
+                  : 'w-2 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400'
+              }`}
+              title={`View Issue ${idx + 1}`}
+            />
+          ))}
+          <span className="text-[10.5px] font-bold text-slate-500 dark:text-slate-400 ml-1">
+            {activeIndex + 1} of {total}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium hidden sm:inline">
+            Scroll or swipe up
+          </span>
+          <button
+            type="button"
+            onClick={prevCard}
+            aria-label="Previous card"
+            className="w-7 h-7 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-50 active:scale-95 transition-all cursor-pointer"
+          >
+            <ChevronUp size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={nextCard}
+            aria-label="Next card"
+            className="w-7 h-7 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-50 active:scale-95 transition-all cursor-pointer"
+          >
+            <ChevronDown size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* 3D Stacked Container */}
+      <div
+        ref={containerRef}
+        onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className="relative w-full h-[375px] sm:h-[405px]"
+        style={{ perspective: '1200px' }}
+      >
+        {issues.map((issue, idx) => {
+          const relativeIndex = (idx - activeIndex + total) % total;
+
+          // Compute 3D layer transforms
+          let transform = '';
+          let zIndex = 10;
+          let opacity = 0;
+          let pointerEvents = 'none';
+
+          if (relativeIndex === 0) {
+            // Front Card
+            zIndex = 30;
+            pointerEvents = 'auto';
+            if (isAnimating && animDirection === 'up') {
+              // Sliding up and out into the back
+              transform = 'translate3d(0, -118%, 40px) rotate(-6deg) scale(0.92)';
+              opacity = 0;
+            } else if (isAnimating && animDirection === 'down') {
+              // Dropping down from above
+              transform = 'translate3d(0, 0, 0) scale(1) rotate(0deg)';
+              opacity = 1;
+            } else {
+              transform = 'translate3d(0, 0, 0) scale(1) rotate(0deg)';
+              opacity = 1;
+            }
+          } else if (relativeIndex === 1) {
+            // Second Card peeking behind to the right
+            zIndex = 20;
+            pointerEvents = 'auto';
+            if (isAnimating && animDirection === 'up') {
+              // Pop up into front
+              transform = 'translate3d(0, 0, 0) scale(1) rotate(0deg)';
+              opacity = 1;
+            } else {
+              transform = 'translate3d(14px, 6px, -40px) scale(0.94) rotate(3deg)';
+              opacity = 0.92;
+            }
+          } else if (relativeIndex === 2) {
+            // Third Card peeking further behind
+            zIndex = 10;
+            pointerEvents = 'auto';
+            if (isAnimating && animDirection === 'up') {
+              // Move to middle slot
+              transform = 'translate3d(14px, 6px, -40px) scale(0.94) rotate(3deg)';
+              opacity = 0.92;
+            } else {
+              transform = 'translate3d(26px, 12px, -80px) scale(0.88) rotate(5.5deg)';
+              opacity = 0.78;
+            }
+          }
+
+          const rank = rankBadges[idx] || rankBadges[2];
+          const photoUrl =
+            issue.imageUrl ||
+            FALLBACK_CATEGORY_IMAGES[issue.category] ||
+            FALLBACK_CATEGORY_IMAGES['Roads'];
+
+          return (
+            <div
+              key={issue.id}
+              onClick={() => {
+                if (relativeIndex === 0) {
+                  onSelectIssue(issue);
+                } else {
+                  // Clicking a background card brings it forward
+                  nextCard();
+                }
+              }}
+              style={{
+                transform,
+                zIndex,
+                opacity,
+                pointerEvents: pointerEvents as any,
+                transition: isAnimating
+                  ? 'all 420ms cubic-bezier(0.34, 1.45, 0.64, 1)'
+                  : 'all 280ms ease-out',
+                willChange: 'transform, opacity',
+              }}
+              className="absolute inset-0 w-full h-full rounded-[28px] overflow-hidden shadow-2xl border border-white/20 dark:border-slate-800/80 cursor-pointer bg-slate-900 group"
+            >
+              {/* Full Photographic Backdrop */}
+              <img
+                src={photoUrl}
+                alt={issue.title}
+                loading="lazy"
+                className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                onError={(e) => {
+                  const fallback =
+                    FALLBACK_CATEGORY_IMAGES[issue.category] ||
+                    FALLBACK_CATEGORY_IMAGES['Roads'];
+                  if ((e.target as HTMLImageElement).src !== fallback) {
+                    (e.target as HTMLImageElement).src = fallback;
+                  }
+                }}
+              />
+
+              {/* Seamless Dark Shadow & Contrast Gradients */}
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/65 via-55% to-slate-950/20" />
+              <div className="absolute inset-0 bg-radial-at-t from-transparent via-transparent to-slate-950/40" />
+
+              {/* Floating Top Floating Action Pills (Reference Match) */}
+              <div className="relative z-10 p-3.5 sm:p-4 flex items-center justify-between">
+                {/* Left: Urgency Rank Pill */}
+                <div
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-black uppercase tracking-wider shadow-md backdrop-blur-md border ${rank.color}`}
+                >
+                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  <span>{rank.label}</span>
+                </div>
+
+                {/* Right: Category + Frosted Glass Action Button */}
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/45 backdrop-blur-md border border-white/20 text-white font-bold text-[10.5px] shadow-sm">
+                    {getCategoryIcon(issue.category)}
+                    <span>{issue.category}</span>
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectIssue(issue);
+                    }}
+                    title="Inspect official inspection docket"
+                    className="w-8 h-8 rounded-full bg-white/25 hover:bg-white/40 active:scale-95 text-white flex items-center justify-center backdrop-blur-md border border-white/30 shadow-sm transition-all cursor-pointer"
+                  >
+                    <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Bottom Card Content Panel */}
+              <div className="absolute bottom-0 inset-x-0 z-10 p-4 sm:p-5 flex flex-col justify-end space-y-2">
+                {/* Location & Impact Petitions Row */}
+                <div className="flex items-center justify-between gap-2 text-white/90">
+                  <div className="inline-flex items-center gap-1 text-[11px] font-semibold tracking-wide text-white/85">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span className="truncate">
+                      {issue.reporter?.wardOrArea || 'BBMP Ward 112'}
+                    </span>
+                  </div>
+
+                  <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-400/30 shrink-0">
+                    <Flame className="w-3 h-3 text-amber-400" />
+                    <span>{issue.upvotes || 0} Petitions</span>
+                  </span>
+                </div>
+
+                {/* Headline: Prominent, legible typography */}
+                <h3 className="text-base sm:text-lg font-black text-white leading-tight drop-shadow-md line-clamp-2">
+                  {issue.title}
+                </h3>
+
+                {/* Issue Description Snippet */}
+                {issue.description && (
+                  <p className="text-[11.5px] text-white/80 line-clamp-1 leading-snug drop-shadow-xs font-normal">
+                    {issue.description}
+                  </p>
+                )}
+
+                {/* Bottom Action Pill */}
+                <div className="pt-1 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectIssue(issue);
+                    }}
+                    className="flex-1 py-2 px-3.5 rounded-xl bg-white text-[#0f2d59] font-black text-xs hover:bg-[#eff6ff] active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                  >
+                    <span>Inspect Official Docket</span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-[#ea580c] stroke-[2.5]" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer Acknowledge Action */}
+      {showAcknowledgeButton && onAcknowledge && (
+        <div className="flex items-center justify-between pt-1 px-1">
+          <span className="text-[10.5px] text-slate-500 dark:text-slate-400">
+            Next Dispatch: Tomorrow at 7:00 AM
+          </span>
+          <button
+            type="button"
+            onClick={onAcknowledge}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#0f2d59] hover:bg-[#07172c] active:scale-95 text-white font-extrabold text-xs transition-all shadow-xs cursor-pointer border border-[#0f2d59]"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Acknowledge</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export interface CityBriefingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -123,15 +486,14 @@ export interface CityBriefingModalProps {
 }
 
 /**
- * Reusable Full 7:00 AM City Briefing Modal.
- * Displays AI-prioritized Top 3 problems of the feed under "Priority Redressal of the Day".
+ * Reusable 7:00 AM City Briefing Modal with 3D Flash Card Deck.
  */
 export const CityBriefingModal: React.FC<CityBriefingModalProps> = ({
   isOpen,
   onClose,
   showAcknowledgeButton = true,
 }) => {
-  const { briefing, posts, setSelectedPostForDetail, acknowledgeBriefing, isBriefingAcknowledged } = useApp();
+  const { posts, setSelectedPostForDetail, acknowledgeBriefing, isBriefingAcknowledged } = useApp();
   const { top3Issues, isLoadingAi } = useCityBriefingAi(posts);
 
   if (!isOpen) return null;
@@ -141,24 +503,29 @@ export const CityBriefingModal: React.FC<CityBriefingModalProps> = ({
     onClose();
   };
 
+  const handleSelectIssue = (issue: CivicPost) => {
+    onClose();
+    setSelectedPostForDetail(issue);
+  };
+
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all animate-in fade-in"
+      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all animate-in fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col pb-safe"
+        className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col pb-safe border border-slate-200 dark:border-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header */}
+        {/* Header */}
         <div className="bg-[#0f2d59] text-white p-4 flex items-center justify-between shrink-0 border-b border-blue-900/50">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center border border-amber-400/40">
-              <Sunrise className="w-4 h-4 text-amber-300" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-white/15 flex items-center justify-center border border-amber-400/40 text-amber-300">
+              <Sunrise className="w-5 h-5" />
             </div>
             <div>
               <h3 className="font-extrabold text-sm leading-tight">Your 7 AM City Briefing</h3>
-              <p className="text-[11px] text-blue-200">BBMP Ward 112 • Official Civic Intelligence</p>
+              <p className="text-[11px] text-blue-200">BBMP Ward 112 • Priority Redressal Flash Cards</p>
             </div>
           </div>
           <button
@@ -169,415 +536,84 @@ export const CityBriefingModal: React.FC<CityBriefingModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs text-[#0f172a]">
-          {/* Headline & Summary */}
-          <div className="bg-[#eff6ff] border border-blue-200 rounded-2xl p-3.5 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-[#0f2d59] font-extrabold text-xs">
-              <Calendar className="w-3.5 h-3.5 text-[#ea580c]" />
-              <span>07:00 AM Municipal Intelligence Dispatch</span>
-            </div>
-            <h4 className="font-extrabold text-sm text-[#0f172a] leading-snug">
-              {top3Issues[0]
-                ? `Priority Redressal Focus: ${top3Issues[0].title}`
-                : briefing.headline}
-            </h4>
-            <p className="text-xs text-[#334155] leading-relaxed">
-              {top3Issues.length > 0
-                ? `AI has analyzed active civic reports and flagged ${top3Issues.length} critical issues requiring urgent redressal today. Field engineers and response units have been prioritized for immediate site remediation.`
-                : briefing.aiSummary}
-            </p>
-          </div>
-
-          {/* Priority Redressal of the Day - AI Ranked Top 3 Problems */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <h5 className="font-extrabold text-xs uppercase tracking-wider text-[#64748b]">
-                  Priority Redressal of the Day
-                </h5>
-                <span className="inline-flex items-center gap-1 text-[9.5px] bg-purple-100 text-purple-900 font-extrabold px-2 py-0.5 rounded-full border border-purple-200">
-                  <Sparkles className="w-2.5 h-2.5 text-purple-600" />
-                  AI Ranked
-                </span>
-              </div>
-              <span className="text-[10px] bg-red-100 text-red-800 font-extrabold px-2 py-0.5 rounded-full border border-red-200">
-                Top 3 Critical Issues
-              </span>
-            </div>
-
-            {isLoadingAi && top3Issues.length === 0 ? (
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center space-y-2">
-                <span className="w-5 h-5 border-2 border-[#0f2d59] border-t-transparent rounded-full animate-spin inline-block" />
-                <p className="text-xs font-semibold text-[#64748b]">AI analyzing civic feed for top safety priorities...</p>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {top3Issues.map((issue, idx) => {
-                  const rankStyles = [
-                    {
-                      tag: '#1 Highest Urgency',
-                      badgeBg: 'bg-red-600 text-white',
-                      border: 'border-red-200',
-                      bg: 'bg-red-50/50',
-                    },
-                    {
-                      tag: '#2 Critical Safety',
-                      badgeBg: 'bg-orange-600 text-white',
-                      border: 'border-orange-200',
-                      bg: 'bg-orange-50/50',
-                    },
-                    {
-                      tag: '#3 Municipal Priority',
-                      badgeBg: 'bg-amber-600 text-white',
-                      border: 'border-amber-200',
-                      bg: 'bg-amber-50/50',
-                    },
-                  ];
-                  const rank = rankStyles[idx] || rankStyles[2];
-
-                  return (
-                    <div
-                      key={issue.id}
-                      className={`border ${rank.border} ${rank.bg} rounded-2xl p-3 shadow-xs space-y-2 transition-all hover:shadow-sm`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-start gap-2">
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${rank.badgeBg} shrink-0 mt-0.5`}>
-                            {rank.tag}
-                          </span>
-                          <div>
-                            <p className="font-extrabold text-xs text-[#0f172a] leading-tight">
-                              {issue.title}
-                            </p>
-                            <p className="text-[11px] text-[#64748b] mt-0.5">
-                              {issue.reporter?.wardOrArea || 'Ward 112'} • {issue.upvotes || 0} citizen petitions & reports
-                            </p>
-                          </div>
-                        </div>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 bg-white rounded-md border border-slate-200 shrink-0 text-[#0f2d59]">
-                          {getCategoryIcon(issue.category)}
-                          <span>{issue.category}</span>
-                        </span>
-                      </div>
-
-                      {issue.description && (
-                        <p className="text-[11px] text-[#334155] line-clamp-2 leading-relaxed bg-white/80 p-2 rounded-xl border border-slate-100">
-                          {issue.description}
-                        </p>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onClose();
-                          setSelectedPostForDetail(issue);
-                        }}
-                        className="w-full py-2 bg-[#0f2d59] text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-[#07172c] active:scale-[0.99] transition-all cursor-pointer border border-[#0f2d59] shadow-2xs"
-                      >
-                        <span>Inspect Official Docket</span>
-                        <ChevronRight size={14} className="text-amber-400" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Key Ward Operations */}
-          <div className="space-y-2">
-            <h5 className="font-extrabold text-xs uppercase tracking-wider text-[#64748b]">
-              Key Ward Operations
-            </h5>
-            <div className="space-y-2">
-              {briefing.topUpdates.map((update) => (
-                <div
-                  key={update.id}
-                  className="bg-white border border-[#cbd5e1] rounded-2xl p-2.5 flex items-start gap-2.5 shadow-xs"
-                >
-                  <div className="w-7 h-7 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 mt-0.5">
-                    {getCategoryIcon(update.category)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1">
-                      <p className="font-bold text-xs text-[#0f172a] truncate">{update.title}</p>
-                      <span className="text-[10px] text-[#0f2d59] font-bold shrink-0 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                        {update.category}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-[#64748b] mt-0.5">{update.impact}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Positive Story */}
-          <div className="bg-[#ecfdf5] border border-emerald-300 rounded-2xl p-3 flex items-start gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-[#0b6623] shrink-0 mt-0.5" />
+        {/* Modal Body with 3D Flash Card Deck */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 rounded-2xl p-3 flex items-center justify-between">
             <div>
-              <p className="font-extrabold text-xs text-[#0b6623]">
-                Yesterday's Impact: {briefing.positiveStory.title}
+              <p className="text-xs font-black text-amber-950 dark:text-amber-200">
+                Top 3 Critical Ward Redressals
               </p>
-              <p className="text-[11px] text-[#15803d] mt-0.5">
-                {briefing.positiveStory.outcome} ({briefing.positiveStory.area})
+              <p className="text-[11px] text-amber-800 dark:text-amber-300/90">
+                Ranked by AI from active citizen grievance reports
               </p>
             </div>
+            <span className="text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full">
+              3D Deck
+            </span>
           </div>
-        </div>
 
-        {/* Modal Footer */}
-        <div className="p-3 bg-white border-t border-[#cbd5e1] flex items-center justify-between shrink-0">
-          <span className="text-[11px] text-[#64748b]">Next Dispatch: Tomorrow at 7:00 AM</span>
-          {showAcknowledgeButton && (
-            <button
-              onClick={handleAcknowledge}
-              className="px-4 py-1.5 bg-[#0f2d59] text-white rounded-xl text-xs font-bold hover:bg-[#07172c] transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{isBriefingAcknowledged ? 'Dismiss' : 'Acknowledge'}</span>
-            </button>
-          )}
+          <FlashCardDeck
+            issues={top3Issues}
+            isLoading={isLoadingAi}
+            onSelectIssue={handleSelectIssue}
+            onAcknowledge={showAcknowledgeButton ? handleAcknowledge : undefined}
+            showAcknowledgeButton={showAcknowledgeButton && !isBriefingAcknowledged}
+          />
         </div>
       </div>
     </div>
   );
 };
 
+/**
+ * HomeScreen Daily Briefing Widget.
+ * Features the 3D stacked flash card deck with rounded corners, rich photos, and scroll animations.
+ */
 export const DailyBriefingCard: React.FC = () => {
-  const { briefing, posts, setSelectedPostForDetail, acknowledgeBriefing } = useApp();
-  const { top3Issues } = useCityBriefingAi(posts);
-
-  // Default to 1 (Your 7 AM City Briefing)
-  const [activeDot, setActiveDot] = useState(1);
-  const [showFullModal, setShowFullModal] = useState(false);
-
-  // 4 slide options for interactive dots, with Slide 1 & 2 matching AI-powered city priorities
-  const slides = [
-    {
-      badge: 'Featured',
-      badgeIcon: 'star',
-      titleLine1: 'Real Change',
-      titleLine2: 'Starts with You',
-      subtitle: 'Report issues • Support causes • Build a better tomorrow',
-      buttonText: 'Explore Issues',
-      actionType: 'explore',
-    },
-    {
-      badge: '7:00 AM City Briefing',
-      badgeIcon: 'sunrise',
-      titleLine1: 'Your 7 AM',
-      titleLine2: 'City Briefing',
-      subtitle: top3Issues[0]
-        ? `Top Priority: ${top3Issues[0].title} • BBMP Active`
-        : 'Morning Ward Dispatch • Official Civic Intelligence',
-      buttonText: 'View Briefing',
-      actionType: 'briefing',
-    },
-    {
-      badge: 'Priority Redressal (AI)',
-      badgeIcon: 'alert',
-      titleLine1: top3Issues[0] ? top3Issues[0].title.slice(0, 24) : 'Road Cavity Fix',
-      titleLine2: top3Issues[0] && top3Issues[0].title.length > 24 ? top3Issues[0].title.slice(24, 48) + '...' : '',
-      subtitle: top3Issues[0]
-        ? `${top3Issues[0].reporter?.wardOrArea || 'Ward 112'} • AI Ranked #1 Priority (${top3Issues[0].upvotes || 0} petitions)`
-        : 'Cold mix leveling in progress • Caution cones placed',
-      buttonText: 'Track Repair',
-      actionType: 'priority',
-    },
-    {
-      badge: 'Positive Impact',
-      badgeIcon: 'trophy',
-      titleLine1: 'Pocket Park Revamp',
-      titleLine2: 'Complete & Open',
-      subtitle: 'Dumping strip transformed into sensory community garden',
-      buttonText: 'See Impact Story',
-      actionType: 'positive',
-    },
-  ];
-
-  const current = slides[activeDot];
-
-  const handleAction = (type: string) => {
-    if (type === 'explore') {
-      const feed = document.getElementById('civic-feed-section');
-      if (feed) {
-        feed.scrollIntoView({ behavior: 'smooth' });
-      } else {
-        window.scrollBy({ top: 320, behavior: 'smooth' });
-      }
-    } else if (type === 'briefing') {
-      setShowFullModal(true);
-    } else if (type === 'priority') {
-      const p = top3Issues[0] || posts.find((item) => item.id === briefing.priorityIssue.id) || posts[0];
-      setSelectedPostForDetail(p);
-    } else if (type === 'positive') {
-      const p = posts.find((item) => item.isPositiveStory) || posts[2] || posts[0];
-      setSelectedPostForDetail(p);
-    }
-  };
+  const { posts, setSelectedPostForDetail, acknowledgeBriefing } = useApp();
+  const { top3Issues, isLoadingAi } = useCityBriefingAi(posts);
 
   return (
-    <>
-      <div className="relative w-full rounded-2xl overflow-hidden shadow-md border border-[#1d4e8c]/40 bg-[#0a1e38] min-h-[115px] sm:min-h-[120px] flex flex-col justify-between p-3.5 sm:p-4 select-none transition-all">
-        {/* Layer 1: High Fidelity Architectural SVG of Twilight City Skyline, Spires & Golden Street Lights */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <svg
-            className="w-full h-full object-cover object-right"
-            viewBox="0 0 800 480"
-            preserveAspectRatio="xMaxYMid slice"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            {/* Twilight Horizon Sky Gradient */}
-            <rect width="800" height="480" fill="url(#twilightGradient)" />
-            <defs>
-              <linearGradient id="twilightGradient" x1="400" y1="0" x2="400" y2="480" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#07172c" />
-                <stop offset="35%" stopColor="#0f2d59" />
-                <stop offset="65%" stopColor="#1e3a8a" />
-                <stop offset="85%" stopColor="#1d4e8c" />
-                <stop offset="100%" stopColor="#07172c" />
-              </linearGradient>
-
-              <linearGradient id="towerGradient1" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#1e3a8a" stopOpacity="0.8" />
-                <stop offset="100%" stopColor="#07172c" stopOpacity="0.95" />
-              </linearGradient>
-
-              <linearGradient id="goldenGlow" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.85" />
-                <stop offset="50%" stopColor="#fbbf24" stopOpacity="0.95" />
-                <stop offset="100%" stopColor="#ea580c" stopOpacity="0.7" />
-              </linearGradient>
-            </defs>
-
-            {/* Distant Spire Towers */}
-            <g opacity="0.6">
-              <polygon points="560,70 550,150 570,150" fill="#3b82f6" />
-              <rect x="548" y="150" width="24" height="200" fill="url(#towerGradient1)" />
-              <polygon points="630,45 618,135 642,135" fill="#3b82f6" />
-              <line x1="630" y1="20" x2="630" y2="45" stroke="#93c5fd" strokeWidth="2.5" />
-              <rect x="616" y="135" width="28" height="220" fill="url(#towerGradient1)" />
-              <polygon points="700,60 688,140 712,140" fill="#3b82f6" />
-              <rect x="686" y="140" width="28" height="210" fill="url(#towerGradient1)" />
-              <polygon points="765,75 754,155 776,155" fill="#3b82f6" />
-              <rect x="752" y="155" width="26" height="195" fill="url(#towerGradient1)" />
-            </g>
-
-            {/* Glowing Golden Highways & City Traffic Lights */}
-            <g opacity="0.75">
-              <path
-                d="M420 480 C 470 380, 520 320, 600 290 C 680 260, 740 280, 800 270"
-                stroke="url(#goldenGlow)"
-                strokeWidth="8"
-                strokeLinecap="round"
-              />
-              <path
-                d="M480 480 C 530 400, 570 350, 660 330 C 720 310, 770 320, 800 315"
-                stroke="#F59E0B"
-                strokeWidth="4"
-                strokeDasharray="12 6"
-              />
-            </g>
-          </svg>
-        </div>
-
-        {/* Layer 2: Night Cityscape Photo */}
-        <img
-          src="https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=1200&q=80"
-          alt="City Aerial Lights"
-          className="absolute inset-0 w-full h-full object-cover object-right pointer-events-none opacity-80 mix-blend-screen"
-          loading="lazy"
-          onError={(e) => {
-            (e.target as HTMLElement).style.display = 'none';
-          }}
-        />
-
-        {/* Layer 3: Deep Ashok Navy Seamless Gradient on Left */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#07172c] via-[#0a2342]/95 via-55% to-transparent pointer-events-none" />
-
-        {/* Content Top: Pill Badge & Pagination Dots */}
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white text-[#0f2d59] font-extrabold text-[11px] shadow-xs border border-blue-100">
-            {current.badgeIcon === 'star' && (
-              <Star className="w-3 h-3 fill-[#ea580c] text-[#ea580c]" />
-            )}
-            {current.badgeIcon === 'sunrise' && (
-              <Sunrise className="w-3.5 h-3.5 text-[#d97706]" />
-            )}
-            {current.badgeIcon === 'alert' && (
-              <AlertCircle className="w-3 h-3 text-[#dc2626]" />
-            )}
-            {current.badgeIcon === 'trophy' && (
-              <Trophy className="w-3 h-3 text-[#d97706]" />
-            )}
-            <span>{current.badge}</span>
+    <section className="bg-white dark:bg-slate-900/90 rounded-3xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
+      {/* Top Banner Header */}
+      <div className="flex items-center justify-between mb-3.5">
+        <div className="flex items-center gap-2.5">
+          <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800/80 flex items-center justify-center text-amber-600 dark:text-amber-400 shadow-xs shrink-0">
+            <Sunrise className="w-5 h-5" />
           </div>
-
-          {/* Pagination Dots */}
-          <div className="flex items-center gap-1" title="Highlights">
-            {slides.map((_, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => setActiveDot(idx)}
-                aria-label={`Slide ${idx + 1}`}
-                className={`w-1.5 h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-                  activeDot === idx
-                    ? 'bg-amber-400 scale-125 shadow-xs'
-                    : 'bg-white/40 hover:bg-white/70'
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Content Bottom: Headline on Left, Action Buttons on Right */}
-        <div className="relative z-10 flex items-end justify-between gap-3 mt-1.5">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight leading-snug drop-shadow-sm truncate">
-              {current.titleLine1} {current.titleLine2}
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300 bg-amber-100/80 dark:bg-amber-950/70 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-900/60">
+                7:00 AM Dispatch
+              </span>
+              <span className="text-[10px] text-slate-400 font-semibold">• BBMP Active</span>
+            </div>
+            <h2 className="text-sm sm:text-base font-black text-slate-900 dark:text-white mt-0.5">
+              Priority Redressal of the Day
             </h2>
-            <p className="text-[10.5px] text-white/85 font-normal leading-tight mt-0.5 line-clamp-1 drop-shadow-xs">
-              {current.subtitle}
-            </p>
-          </div>
-
-          {/* Action Buttons: Acknowledge & Official Civic Pill */}
-          <div className="shrink-0 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                acknowledgeBriefing();
-              }}
-              title="Acknowledge briefing and move to Menu"
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white font-extrabold text-xs backdrop-blur-xs border border-white/30 transition-all cursor-pointer active:scale-95 shadow-2xs"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
-              <span>Acknowledge</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleAction(current.actionType)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-[#0f2d59] font-extrabold text-xs hover:bg-[#eff6ff] active:scale-95 transition-all shadow-sm cursor-pointer border border-blue-200/60"
-            >
-              <span>{current.buttonText}</span>
-              <ArrowRight className="w-3 h-3 stroke-[2.5] text-[#ea580c]" />
-            </button>
           </div>
         </div>
+
+        {/* Quick Acknowledge Button */}
+        <button
+          type="button"
+          onClick={acknowledgeBriefing}
+          title="Acknowledge briefing and move to Menu"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#0f2d59] hover:bg-[#1d4e8c] active:scale-95 text-white font-extrabold text-xs transition-all shadow-xs cursor-pointer border border-[#0f2d59]"
+        >
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Acknowledge</span>
+        </button>
       </div>
 
-      {/* Full 7 AM Briefing Modal */}
-      <CityBriefingModal
-        isOpen={showFullModal}
-        onClose={() => setShowFullModal(false)}
+      {/* 3D Interactive Flash Card Deck */}
+      <FlashCardDeck
+        issues={top3Issues}
+        isLoading={isLoadingAi}
+        onSelectIssue={(issue) => setSelectedPostForDetail(issue)}
+        onAcknowledge={acknowledgeBriefing}
         showAcknowledgeButton={true}
       />
-    </>
+    </section>
   );
 };
