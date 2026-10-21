@@ -4,6 +4,7 @@ from app.models.notification import Notification
 from app.models.quiz import QuizAttempt
 from app.models.reward import RewardTransaction
 from app.models.user import User
+from app.models.volunteer import Campaign, CampaignMember, Vacancy, VacancyApplication
 
 __all__ = [
     "User",
@@ -17,4 +18,8 @@ __all__ = [
     "QuizAttempt",
     "Contest",
     "ContestEntry",
+    "Vacancy",
+    "VacancyApplication",
+    "Campaign",
+    "CampaignMember",
 ]

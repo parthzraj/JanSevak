@@ -809,3 +809,232 @@ def test_deleted_report_disappears_everywhere(client, make_user):
     assert client.get(f"/api/issues/{gone}/supporters", headers=h).status_code == 404
     assert client.post(f"/api/issues/{gone}/comments", json={"text": "hi"}, headers=h).status_code == 404
     assert client.get("/api/analytics/summary", headers=h).json()["mine"]["total"] == 1
+
+
+# ---------------------------------------------------------------- civic drives (campaigns) and NGO vacancies
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+
+def _iso(**delta):
+    return (datetime.now(timezone.utc) + timedelta(**delta)).isoformat()
+
+
+def _campaign(**over):
+    body = {
+        "title": "Lake clean-up Sunday",
+        "description": "Bring gloves and a bag, we clear the lake edge together.",
+        "kind": "Cleanup",
+        "address": "Ulsoor Lake",
+        "starts_at": _iso(days=1),
+        "ends_at": _iso(days=1, hours=3),
+        "volunteers_needed": 5,
+    }
+    body.update(over)
+    return body
+
+
+def _start_now(client_headers_fn=None):
+    """Move a campaign's start into the past so it can be wrapped up."""
+    from app.core.database import SessionLocal
+    from app.models.volunteer import Campaign
+
+    def go(cid):
+        with SessionLocal() as db:
+            c = db.get(Campaign, cid)
+            c.starts_at = datetime.now(timezone.utc) - timedelta(hours=4)
+            c.ends_at = datetime.now(timezone.utc) - timedelta(hours=1)
+            db.commit()
+
+    return go
+
+
+def test_any_citizen_can_organise_a_campaign_linked_to_an_issue_or_standalone(client, make_user):
+    h, _ = make_user(email="org@example.com")
+    iid = client.post("/api/issues", json=ISSUE, headers=h).json()["issue"]["id"]
+    linked = client.post("/api/campaigns", json=_campaign(issue_id=iid), headers=h)
+    assert linked.status_code == 201
+    body = linked.json()
+    assert body["status"] == "Upcoming" and body["organiser_type"] == "Citizen" and body["is_organiser"] is True
+    assert body["issue"]["id"] == iid
+    assert client.post("/api/campaigns", json=_campaign(title="Plain drive"), headers=h).json()["issue"] is None
+    assert client.post("/api/campaigns", json=_campaign(issue_id=9999), headers=h).status_code == 404
+    assert client.get(f"/api/campaigns?issue_id={iid}").json()["total"] == 1
+    assert client.post("/api/campaigns", json=_campaign()).status_code == 401
+
+
+def test_campaign_time_rules(client, make_user):
+    h, _ = make_user()
+    assert client.post("/api/campaigns", json=_campaign(starts_at=_iso(days=-2), ends_at=_iso(days=-1)), headers=h).status_code == 422
+    assert client.post("/api/campaigns", json=_campaign(ends_at=_iso(hours=1)), headers=h).status_code == 422
+    assert client.post("/api/campaigns", json=_campaign(ends_at=_iso(days=30)), headers=h).status_code == 422
+
+
+def test_max_five_open_campaigns_per_organiser(client, make_user):
+    h, _ = make_user()
+    for i in range(5):
+        assert client.post("/api/campaigns", json=_campaign(title=f"Drive number {i}"), headers=h).status_code == 201
+    assert client.post("/api/campaigns", json=_campaign(title="Sixth drive"), headers=h).status_code == 409
+
+
+def test_join_leave_capacity_and_own_campaign(client, make_user):
+    org, _ = make_user(email="o@example.com")
+    cid = client.post("/api/campaigns", json=_campaign(volunteers_needed=1), headers=org).json()["id"]
+    a, _ = make_user(email="a@example.com")
+    b, _ = make_user(email="b@example.com")
+    assert client.post(f"/api/campaigns/{cid}/join", headers=org).status_code == 403
+    r = client.post(f"/api/campaigns/{cid}/join", headers=a)
+    assert r.status_code == 200 and r.json()["my_status"] == "Joined" and r.json()["volunteers_joined"] == 1
+    assert client.post(f"/api/campaigns/{cid}/join", headers=a).status_code == 409
+    assert client.post(f"/api/campaigns/{cid}/join", headers=b).status_code == 409  # full
+    assert client.delete(f"/api/campaigns/{cid}/join", headers=a).json()["volunteers_joined"] == 0
+    assert client.post(f"/api/campaigns/{cid}/join", headers=b).status_code == 200
+    notes = client.get("/api/notifications", headers=org).json()
+    assert any("joined" in n["message"] for n in (notes["items"] if isinstance(notes, dict) else notes))
+
+
+def test_wrap_up_pays_confirmed_volunteers_and_organiser(client, make_user):
+    org, org_u = make_user(email="o@example.com")
+    cid = client.post("/api/campaigns", json=_campaign(), headers=org).json()["id"]
+    vols = [make_user(email=f"v{i}@example.com") for i in range(3)]
+    for h, _ in vols:
+        client.post(f"/api/campaigns/{cid}/join", headers=h)
+    assert client.post(f"/api/campaigns/{cid}/complete", json={"attended_user_ids": [vols[0][1]["id"]]}, headers=org).status_code == 409  # not started
+
+    _start_now()(cid)
+    assert client.post(f"/api/campaigns/{cid}/complete", json={"attended_user_ids": [vols[0][1]["id"]]}, headers=vols[0][0]).status_code == 403
+    assert client.post(f"/api/campaigns/{cid}/complete", json={"attended_user_ids": [org_u["id"]]}, headers=org).status_code == 400
+    assert client.post(f"/api/campaigns/{cid}/complete", json={"attended_user_ids": []}, headers=org).status_code == 400
+    assert client.post(f"/api/campaigns/{cid}/complete", json={"attended_user_ids": [99999]}, headers=org).status_code == 400
+
+    ids = [vols[0][1]["id"], vols[1][1]["id"]]
+    r = client.post(f"/api/campaigns/{cid}/complete", json={"attended_user_ids": ids}, headers=org)
+    assert r.status_code == 200
+    out = r.json()
+    assert out["campaign"]["status"] == "Completed" and out["attended"] == 2 and out["no_show"] == 1
+    assert out["host_points_awarded"] == 40 and out["volunteers_paid"] == 2  # 20 + 10 * 2
+    assert client.get("/api/auth/me", headers=org).json()["points"] == 40
+    me0 = client.get("/api/auth/me", headers=vols[0][0]).json()
+    assert me0["points"] == 30 and me0["volunteer_hours"] == 3.0
+    assert client.get("/api/auth/me", headers=vols[2][0]).json()["points"] == 0  # no-show
+    states = {m["user_id"]: m["status"] for m in out["campaign"]["members"]}
+    assert states[vols[2][1]["id"]] == "NoShow"
+    # paid exactly once, history shows it
+    assert client.post(f"/api/campaigns/{cid}/complete", json={"attended_user_ids": ids}, headers=org).status_code == 409
+    hist = client.get("/api/rewards/history", headers=vols[0][0]).json()
+    items = hist["items"] if isinstance(hist, dict) else hist
+    assert any("Civic drive" in i["description"] for i in items)
+
+
+def test_cancel_and_edit_rules(client, make_user):
+    org, _ = make_user(email="o@example.com")
+    v, _ = make_user(email="v@example.com")
+    cid = client.post("/api/campaigns", json=_campaign(), headers=org).json()["id"]
+    client.post(f"/api/campaigns/{cid}/join", headers=v)
+    assert client.patch(f"/api/campaigns/{cid}", json={"title": "Hacked title"}, headers=v).status_code == 403
+    assert client.patch(f"/api/campaigns/{cid}", json={"volunteers_needed": 1}, headers=org).status_code == 200
+    assert client.patch(f"/api/campaigns/{cid}", json={"volunteers_needed": 1, "title": "Renamed drive"}, headers=org).json()["title"] == "Renamed drive"
+    r = client.post(f"/api/campaigns/{cid}/cancel", headers=org)
+    assert r.json()["status"] == "Cancelled"
+    assert client.post(f"/api/campaigns/{cid}/join", headers=make_user(email="late@example.com")[0]).status_code == 409
+    assert client.patch(f"/api/campaigns/{cid}", json={"title": "Edit after cancel"}, headers=org).status_code == 409
+    assert client.post(f"/api/campaigns/{cid}/complete", json={"attended_user_ids": []}, headers=org).status_code == 409
+
+
+def test_campaign_listing_filters_and_status(client, make_user):
+    ngo_h = _ngo(client)
+    cit, _ = make_user(email="c@example.com")
+    n = client.post("/api/campaigns", json=_campaign(title="NGO drive here"), headers=ngo_h).json()
+    c1 = client.post("/api/campaigns", json=_campaign(title="Citizen drive here"), headers=cit).json()
+    assert n["organiser_type"] == "NGO"
+    assert client.get("/api/campaigns?organiser_type=ngo").json()["total"] == 1
+    assert client.get("/api/campaigns?organiser_type=citizen").json()["items"][0]["id"] == c1["id"]
+    assert client.get("/api/campaigns?status=Upcoming").json()["total"] == 2
+    assert client.get("/api/campaigns?status=Ongoing").json()["total"] == 0
+    _start_now()(c1["id"])
+    assert client.get("/api/campaigns?status=Awaiting wrap-up").json()["total"] == 1
+    client.post(f"/api/campaigns/{c1['id']}/cancel", headers=cit)
+    assert client.get("/api/campaigns?status=Cancelled").json()["total"] == 1
+    assert client.get("/api/campaigns?mine=true", headers=cit).json()["total"] == 1
+    assert client.get("/api/campaigns?mine=true").status_code == 401
+
+
+def test_weekly_cap_on_paid_volunteering_but_hours_still_count(client, make_user):
+    v, v_u = make_user(email="busy@example.com")
+    for i in range(4):
+        org, _ = make_user(email=f"org{i}@example.com")
+        cid = client.post("/api/campaigns", json=_campaign(title=f"Drive number {i}"), headers=org).json()["id"]
+        client.post(f"/api/campaigns/{cid}/join", headers=v)
+        _start_now()(cid)
+        r = client.post(f"/api/campaigns/{cid}/complete", json={"attended_user_ids": [v_u["id"]]}, headers=org).json()
+    me = client.get("/api/auth/me", headers=v).json()
+    assert me["points"] == 90  # three paid drives, the fourth only credits hours
+    assert me["volunteer_hours"] == 12.0
+    assert r["volunteers_paid"] == 0 and any("weekly" in n for n in r["notes"])
+
+
+def _vac(**over):
+    body = {"title": "Weekend clean-up crew", "role_type": "Volunteer", "description": "Help us clear lakes every weekend.", "slots": 1}
+    body.update(over)
+    return body
+
+
+def test_only_ngos_post_vacancies_and_citizens_apply(client, make_user):
+    ngo_h = _ngo(client)
+    cit, _ = make_user(email="c@example.com")
+    assert client.post("/api/vacancies", json=_vac(), headers=cit).status_code == 403
+    assert client.post("/api/vacancies", json=_vac()).status_code == 401
+    v = client.post("/api/vacancies", json=_vac(), headers=ngo_h).json()
+    assert v["is_owner"] is True and v["is_open"] is True and v["ngo"]["is_ngo"] is True
+    assert client.post("/api/vacancies", json=_vac(deadline=_iso(days=-1)), headers=ngo_h).status_code == 422
+
+    assert client.post(f"/api/vacancies/{v['id']}/apply", json={"note": "I can help"}, headers=ngo_h).status_code == 403
+    r = client.post(f"/api/vacancies/{v['id']}/apply", json={"note": "I can help"}, headers=cit)
+    assert r.status_code == 200 and r.json()["my_application"] == "Applied" and r.json()["applicants_count"] == 1
+    assert client.post(f"/api/vacancies/{v['id']}/apply", json={}, headers=cit).status_code == 409
+    assert client.delete(f"/api/vacancies/{v['id']}/apply", headers=cit).json()["my_application"] == "Withdrawn"
+    assert client.post(f"/api/vacancies/{v['id']}/apply", json={}, headers=cit).json()["my_application"] == "Applied"
+    assert client.get("/api/vacancies", headers=cit).json()["items"][0]["my_application"] == "Applied"
+    assert client.get("/api/vacancies?mine=true", headers=cit).json()["total"] == 0
+
+
+def test_application_review_flow_and_completion_reward(client, make_user):
+    ngo_h = _ngo(client)
+    a, _ = make_user(email="a@example.com")
+    b, _ = make_user(email="b@example.com")
+    other_ngo = client.post("/api/auth/register", json={"name": "Other Trust", "email": "o2@x.org", "password": "secret1", "account_type": "ngo", "ngo_code": "ngo-secret"}).json()
+    other_h = {"Authorization": f"Bearer {other_ngo['access_token']}"}
+    vid = client.post("/api/vacancies", json=_vac(slots=1), headers=ngo_h).json()["id"]
+    client.post(f"/api/vacancies/{vid}/apply", json={"note": "A"}, headers=a)
+    client.post(f"/api/vacancies/{vid}/apply", json={"note": "B"}, headers=b)
+
+    assert client.get(f"/api/vacancies/{vid}/applications", headers=other_h).status_code == 403
+    assert client.get(f"/api/vacancies/{vid}/applications", headers=a).status_code == 403
+    apps = client.get(f"/api/vacancies/{vid}/applications", headers=ngo_h).json()
+    assert [x["note"] for x in apps] == ["A", "B"]
+    aid, bid = apps[0]["id"], apps[1]["id"]
+
+    assert client.patch(f"/api/vacancies/{vid}/applications/{aid}", json={"status": "Completed"}, headers=ngo_h).status_code == 409  # not accepted yet
+    assert client.patch(f"/api/vacancies/{vid}/applications/{aid}", json={"status": "Accepted"}, headers=ngo_h).status_code == 200
+    assert client.patch(f"/api/vacancies/{vid}/applications/{bid}", json={"status": "Accepted"}, headers=ngo_h).status_code == 409  # slots full
+    assert client.patch(f"/api/vacancies/{vid}/applications/{bid}", json={"status": "Rejected"}, headers=ngo_h).status_code == 200
+    assert client.delete(f"/api/vacancies/{vid}/apply", headers=a).status_code == 409  # accepted: cannot withdraw
+
+    done = client.patch(f"/api/vacancies/{vid}/applications/{aid}", json={"status": "Completed"}, headers=ngo_h).json()
+    assert done["status"] == "Completed" and done["points_awarded"] == 40
+    assert client.get("/api/auth/me", headers=a).json()["points"] == 40
+    assert client.get("/api/auth/me", headers=b).json()["points"] == 0
+    mine = client.get("/api/vacancies/applications/mine", headers=a).json()
+    assert mine[0]["status"] == "Completed" and mine[0]["vacancy"]["id"] == vid
+    # a second completion cannot pay twice
+    assert client.patch(f"/api/vacancies/{vid}/applications/{aid}", json={"status": "Completed"}, headers=ngo_h).status_code == 409
+
+
+def test_closed_vacancy_rejects_applications(client, make_user):
+    ngo_h = _ngo(client)
+    cit, _ = make_user(email="c@example.com")
+    vid = client.post("/api/vacancies", json=_vac(), headers=ngo_h).json()["id"]
+    assert client.post(f"/api/vacancies/{vid}/close", headers=cit).status_code == 403
+    assert client.post(f"/api/vacancies/{vid}/close", headers=ngo_h).json()["is_open"] is False
+    assert client.post(f"/api/vacancies/{vid}/apply", json={}, headers=cit).status_code == 409
+    assert client.get("/api/vacancies").json()["total"] == 0
+    assert client.get("/api/vacancies?include_closed=true").json()["total"] == 1
