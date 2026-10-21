@@ -45,17 +45,18 @@ interface TileStyleConfig {
 }
 
 const TILE_STYLES: Record<TileStyleKey, TileStyleConfig> = {
-  dark: {
-    name: 'Dark Matter (Ola Style)',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    subdomains: 'abcd',
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    maxZoom: 20,
-  },
   osm: {
     name: 'OpenStreetMap (Standard)',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    subdomains: 'abc',
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  },
+  dark: {
+    name: 'OpenStreetMap (Dark Mode)',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    subdomains: 'abc',
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     maxZoom: 19,
@@ -112,7 +113,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
     !isNaN(latitude) &&
     !isNaN(longitude);
 
-  const [mapStyleKey, setMapStyleKey] = useState<TileStyleKey>('dark');
+  const [mapStyleKey, setMapStyleKey] = useState<TileStyleKey>('osm');
   const [mapLoaded, setMapLoaded] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -518,6 +519,9 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
           background: transparent !important;
           border: none !important;
         }
+        .dark-map-tiles .leaflet-tile {
+          filter: brightness(0.65) invert(1) contrast(2.4) hue-rotate(195deg) saturate(0.4) brightness(0.85) !important;
+        }
       `}</style>
 
       {/* TOP FLOATING APP BAR */}
@@ -530,7 +534,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
             </span>
             <span className="text-xs font-bold tracking-wide">Live Issue Map</span>
             <span className="text-[10px] text-slate-400 border-l border-slate-700 pl-2">
-              {mapStyleKey === 'dark' ? 'Ola Dark' : 'OpenStreetMap'}
+              {mapStyleKey === 'dark' ? 'Dark Mode' : 'OpenStreetMap'}
             </span>
           </div>
         </div>
@@ -541,7 +545,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
             type="button"
             onClick={() => setMapStyleKey((prev) => (prev === 'dark' ? 'osm' : 'dark'))}
             className="w-10 h-10 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-slate-800 transition-all shadow-xl flex items-center justify-center active:scale-95 cursor-pointer"
-            title={`Switch to ${mapStyleKey === 'dark' ? 'OpenStreetMap' : 'Dark Matter'} style`}
+            title={`Switch to ${mapStyleKey === 'dark' ? 'Standard OpenStreetMap' : 'Dark Mode'}`}
             aria-label="Toggle map style"
           >
             <Layers className="w-4 h-4 text-sky-400" />
@@ -563,7 +567,9 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
       {/* MAP CANVAS CONTAINER */}
       <div
         ref={mapContainerRef}
-        className="w-full h-full flex-1 relative bg-slate-950 z-0"
+        className={`w-full h-full flex-1 relative z-0 transition-colors duration-300 ${
+          mapStyleKey === 'dark' ? 'bg-slate-950 dark-map-tiles' : 'bg-slate-100'
+        }`}
         style={{ minHeight: '100%' }}
       />
 
