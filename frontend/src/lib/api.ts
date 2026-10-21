@@ -450,3 +450,92 @@ export async function analyzeImage(imageFile: File): Promise<{
   }
   return response.json();
 }
+
+// ---------------------------------------------------------------------------
+// Predictive Alerts (AI)
+// ---------------------------------------------------------------------------
+export async function fetchPredictiveAlerts(season?: string): Promise<{ alerts: any[] }> {
+  const params = season && season !== 'All' ? `?season=${encodeURIComponent(season)}` : '';
+  return aiRequest(`/api/predictive/alerts${params}`, { method: 'GET' });
+}
+
+export async function checkStreetRisk(street: string): Promise<{
+  zone: string;
+  riskLevel: 'High' | 'Moderate' | 'Low';
+  probability: number;
+  predictedHazard: string;
+  actionRequired: string;
+}> {
+  return aiRequest('/api/predictive/check-street', {
+    method: 'POST',
+    body: JSON.stringify({ street }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Photo Verification (AI)
+// ---------------------------------------------------------------------------
+export async function verifyPhoto(imageFile: File): Promise<{
+  decision: 'pass' | 'reject' | 'uncertain';
+  is_civic_issue: boolean;
+  confidence: number;
+  detected_issue: string;
+  suggested_category: string;
+  reason: string;
+  unsafe_content: boolean;
+}> {
+  const formData = new FormData();
+  formData.append('image', imageFile);
+  const response = await fetch(`${AI_API_BASE_URL}/api/photo/verify`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    let message = `Photo verification failed (${response.status})`;
+    try {
+      const error = (await response.json()) as ApiErrorResponse;
+      if (typeof error.detail === 'string') message = error.detail;
+    } catch { /* ignore */ }
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+// ---------------------------------------------------------------------------  
+// Auto-draft from photo (AI)
+// ---------------------------------------------------------------------------
+export async function prepareWithImage(imageFile: File, issue?: string, location?: string): Promise<{
+  title: string;
+  description: string;
+  category: string;
+  severity: string;
+  confidence: number;
+}> {
+  const formData = new FormData();
+  formData.append('image', imageFile);
+  if (issue) formData.append('issue', issue);
+  if (location) formData.append('location', location);
+  const response = await fetch(`${AI_API_BASE_URL}/api/complaint/prepare-with-image`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    let message = `Photo analysis failed (${response.status})`;
+    try {
+      const error = (await response.json()) as ApiErrorResponse;
+      if (typeof error.detail === 'string') message = error.detail;
+    } catch { /* ignore */ }
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+export default {
+  getToken,
+  setToken,
+  assetUrl,
+  fetchPredictiveAlerts,
+  checkStreetRisk,
+  verifyPhoto,
+  prepareWithImage,
+};

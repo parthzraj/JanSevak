@@ -18,7 +18,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { CivicCategory, IssuePriority } from '../types';
 import { MapPickerModal } from '../components/report/MapPickerModal';
-import { improveDescription } from '../lib/api';
+import { improveDescription, prepareWithImage } from '../lib/api';
 import { reportChecklist, descriptionProblem, MIN_TITLE_CHARS } from '../lib/reportRules';
 
 export const CreateReportScreen: React.FC = () => {
@@ -32,6 +32,8 @@ export const CreateReportScreen: React.FC = () => {
   const [imagesList, setImagesList] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAiDrafting, setIsAiDrafting] = useState(false);
+  const [isPhotoAnalyzing, setIsPhotoAnalyzing] = useState(false);
+  const [photoAiBanner, setPhotoAiBanner] = useState(false);
   const [submittedReportId, setSubmittedReportId] = useState<string | null>(null);
 
   // Location fields
@@ -41,6 +43,24 @@ export const CreateReportScreen: React.FC = () => {
   const [isLocatingGps, setIsLocatingGps] = useState(false);
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
 
+  const handlePhotoAutoAnalysis = async (file: File) => {
+    setIsPhotoAnalyzing(true);
+    try {
+      const result = await prepareWithImage(file);
+      // Only auto-fill if fields are empty
+      if (!title.trim() && result.title) setTitle(result.title);
+      if (!description.trim() && result.description) setDescription(result.description);
+      if (result.category) setCategory(result.category as CivicCategory);
+      if (result.severity) setPriority(result.severity as IssuePriority);
+      setPhotoAiBanner(true);
+      addToast('AI Analysis Complete', 'Title, description and category have been pre-filled from your photo.', 'success');
+    } catch (err) {
+      console.error('Photo auto-analysis failed:', err);
+      // Silently fail - the user can still fill in manually
+    } finally {
+      setIsPhotoAnalyzing(false);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -50,6 +70,10 @@ export const CreateReportScreen: React.FC = () => {
         reader.onloadend = () => {
           if (reader.result) {
             setImagesList((prev) => [...prev, reader.result as string]);
+            // Auto-analyze first uploaded photo with AI
+            if (imagesList.length === 0) {
+              handlePhotoAutoAnalysis(file);
+            }
           }
         };
         reader.readAsDataURL(file);
@@ -237,6 +261,13 @@ export const CreateReportScreen: React.FC = () => {
                 ))}
               </div>
 
+              {isPhotoAnalyzing && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-950/60 rounded-xl border border-blue-200 dark:border-blue-900/60 animate-pulse">
+                  <span className="w-4 h-4 border-2 border-[#0f2d59] border-t-transparent rounded-full animate-spin" />
+                  <span className="text-xs font-bold text-[#0f2d59] dark:text-blue-300">AI is analyzing your photo...</span>
+                </div>
+              )}
+
               <label className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0f2d59] hover:text-[#1d4e8c] cursor-pointer bg-[#eff6ff] px-3 py-1.5 rounded-xl border border-blue-200">
                 <Upload className="w-3.5 h-3.5" />
                 <span>Add more photos</span>
@@ -272,6 +303,18 @@ export const CreateReportScreen: React.FC = () => {
             </div>
           )}
         </div>
+
+        {photoAiBanner && (
+          <div className="flex items-center justify-between px-3 py-2 bg-emerald-50 dark:bg-emerald-950/60 rounded-xl border border-emerald-200 dark:border-emerald-900/60">
+            <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              Pre-filled by AI from your photo. Feel free to edit.
+            </span>
+            <button type="button" onClick={() => setPhotoAiBanner(false)} className="text-emerald-600 hover:text-emerald-800 cursor-pointer">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* 2. Category Selector */}
         <div>

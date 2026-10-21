@@ -285,7 +285,124 @@ Accepts an image along with preliminary issue notes, synthesizing a complete com
   "title": "Pothole Hazard on 12th Main",
   "description": "A significant road surface collapse on 12th Main Road with exposed aggregate and rainwater pooling, posing an imminent collision hazard for motorized two-wheelers.",
   "category": "Roads",
-  "severity": "High"
+  "severity": "High",
+  "confidence": 0.85
+}
+```
+
+---
+
+### 9. Photo Relevance Verification
+Inspects citizen uploaded photographs using LLaVA vision to verify that the image captures a genuine public civic issue rather than a selfie, indoor photo, food, meme, or screenshot.
+
+- **Endpoint**: `POST /api/photo/verify`
+- **Content-Type**: `multipart/form-data`
+
+#### Request Body (Multipart Form)
+| Part Name | Type | Required | Description |
+|---|---|---|---|
+| `image` | binary / file | Yes | Visual evidence photo (JPEG, PNG, WEBP, max 20MB). |
+
+#### Response 200 (OK)
+```json
+{
+  "decision": "pass",
+  "is_civic_issue": true,
+  "confidence": 0.86,
+  "detected_issue": "Large pothole with standing water",
+  "suggested_category": "Roads",
+  "reason": "Visible road damage with water collected inside",
+  "unsafe_content": false
+}
+```
+
+#### Decision Rules
+- `reject`: Clearly not a civic issue (`is_civic_issue == false` with `confidence >= 0.70`), or `unsafe_content == true`.
+- `pass`: Clearly a civic issue (`is_civic_issue == true` with `confidence >= 0.60`).
+- `uncertain`: Ambiguous, dark, blurry, or low confidence photos. Core API marks photo as pending for official review.
+
+---
+
+### 10. Predictive Civic Alerts
+Retrieves season-specific AI-generated civic hazard early warnings based on historical climate, waste, and municipal drainage datasets.
+
+- **Endpoint**: `GET /api/predictive/alerts`
+- **Query Parameters**:
+  - `season` (optional): Filter by season (`Monsoon`, `Summer`, `Post-Monsoon`, `Winter`, `Immediate (30-day)`). Defaults to auto-detected season based on current date.
+
+#### Response 200 (OK)
+```json
+{
+  "alerts": [
+    {
+      "id": "alert-monsoon-drain",
+      "season": "Monsoon",
+      "seasonLabel": "Upcoming Monsoon Season",
+      "title": "Waterlogging & Catchpit Backflow in Low-Elevation Basins",
+      "category": "Water",
+      "severity": "Critical",
+      "probability": 88,
+      "expectedTimeline": "Expected onset: June – August",
+      "daysAway": 42,
+      "affectedZones": ["Low-lying Underpass Basins", "Canal-adjacent corridors"],
+      "historicalPrecedent": "Based on municipal climate and drainage data: low road drainage coverage triggers waterlogging complaints during heavy precipitation events exceeding 40mm/hr.",
+      "problemDescription": "Convective rainfall combined with sub-optimal road storm drainage triggers surface inundation and cellar backflow if culverts remain uncleaned.",
+      "citizenImpact": [
+        "Basement parking inundation risk",
+        "Drinking water sump contamination from runoff",
+        "Severe arterial road traffic gridlock"
+      ],
+      "citizenSolutions": [
+        {
+          "title": "Elevate Sump Covers",
+          "description": "Ensure drinking water sump lids are elevated above driveway paving to prevent dirty runoff infiltration.",
+          "actionableStep": "Inspect and seal sump perimeter rubber gaskets."
+        }
+      ],
+      "municipalMitigation": [
+        {
+          "department": "Stormwater Drainage Division",
+          "plan": "Mechanized robotic desilting of primary box culverts.",
+          "status": "In Progress",
+          "targetDate": "May 10"
+        }
+      ],
+      "checklist": [
+        {
+          "id": "chk-sump",
+          "text": "Elevate underground sump inspection covers",
+          "points": 10
+        }
+      ],
+      "helpline": "Municipal Disaster Control: 1800-XXX-XXXX"
+    }
+  ]
+}
+```
+
+---
+
+### 11. Street Risk Assessment
+Simulates predictive hazard probability and prevention advice for a specific street or layout.
+
+- **Endpoint**: `POST /api/predictive/check-street`
+- **Content-Type**: `application/json`
+
+#### Request Body
+```json
+{
+  "street": "100ft Road Underpass"
+}
+```
+
+#### Response 200 (OK)
+```json
+{
+  "zone": "100ft Road Underpass",
+  "riskLevel": "High",
+  "probability": 85,
+  "predictedHazard": "Severe stormwater backflow and basement inundation during heavy downpours",
+  "actionRequired": "Inspect and elevate sump lids above driveway grade; install non-return flap valves."
 }
 ```
 

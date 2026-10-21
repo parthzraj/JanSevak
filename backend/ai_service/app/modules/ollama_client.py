@@ -15,6 +15,7 @@ def call_ollama_text(prompt: str, json_mode: bool = False, timeout: Optional[int
         "model": config.TEXT_MODEL,
         "prompt": prompt,
         "stream": False,
+        "keep_alive": "30m",
     }
     if json_mode:
         payload["format"] = "json"
@@ -78,6 +79,7 @@ def call_ollama_vision(prompt: str, image_base64: str, timeout: Optional[int] = 
         "prompt": prompt,
         "images": [image_base64],
         "stream": False,
+        "keep_alive": "30m",
     }
 
     timeout_val = timeout or config.VISION_TIMEOUT

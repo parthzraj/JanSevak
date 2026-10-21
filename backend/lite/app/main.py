@@ -98,6 +98,72 @@ class PrepareWithImageResponse(BaseModel):
     description: str
     category: str
     severity: str
+    confidence: float = 0.85
+
+
+class PhotoVerifyResponse(BaseModel):
+    decision: str
+    is_civic_issue: bool
+    confidence: float
+    detected_issue: str
+    suggested_category: str
+    reason: str
+    unsafe_content: bool
+
+
+class CitizenSolution(BaseModel):
+    title: str
+    description: str
+    actionableStep: str
+
+
+class MunicipalMitigation(BaseModel):
+    department: str
+    plan: str
+    status: str
+    targetDate: str
+
+
+class ChecklistItem(BaseModel):
+    id: str
+    text: str
+    points: int
+
+
+class PredictiveAlertResponse(BaseModel):
+    id: str
+    season: str
+    seasonLabel: str
+    title: str
+    category: str
+    severity: str
+    probability: int
+    expectedTimeline: str
+    daysAway: int
+    affectedZones: List[str]
+    historicalPrecedent: str
+    problemDescription: str
+    citizenImpact: List[str]
+    citizenSolutions: List[CitizenSolution]
+    municipalMitigation: List[MunicipalMitigation]
+    checklist: List[ChecklistItem]
+    helpline: str
+
+
+class PredictiveAlertsListResponse(BaseModel):
+    alerts: List[PredictiveAlertResponse]
+
+
+class StreetRiskRequest(BaseModel):
+    street: str = Field(..., min_length=1)
+
+
+class StreetRiskResponse(BaseModel):
+    zone: str
+    riskLevel: str
+    probability: int
+    predictedHazard: str
+    actionRequired: str
 
 # ── Template Responses ─────────────────────────────────────────────────
 
@@ -271,4 +337,249 @@ def prepare_with_image_endpoint(
         description=f"Issue reported{f' at {location}' if location.strip() else ''}: {title}. Photo evidence attached. Detailed AI analysis requires the full AI service.",
         category="Roads",
         severity="Medium",
+        confidence=0.85,
+    )
+
+
+# ── New AI Feature Endpoints (Lite Fallback) ───────────────────────────
+
+FALLBACK_ALERTS = {
+    "Monsoon": [
+        {
+            "id": "lite-monsoon-flood",
+            "season": "Monsoon",
+            "seasonLabel": "Upcoming Monsoon Season",
+            "title": "Waterlogging & Stormwater Drain Overflow Risk",
+            "category": "Water",
+            "severity": "Critical",
+            "probability": 88,
+            "expectedTimeline": "Expected during peak monsoon months",
+            "daysAway": 45,
+            "affectedZones": ["Low-lying areas", "Underpass zones", "Canal-adjacent streets", "Basement-level buildings"],
+            "historicalPrecedent": "Based on historical data: waterlogging complaints surge by 300% during initial monsoon weeks due to clogged drains and construction debris.",
+            "problemDescription": "Heavy rainfall rates exceeding 40mm/hour combined with accumulated silt in drainage systems create high risk of surface flooding and basement inundation.",
+            "citizenImpact": [
+                "Flooding in residential basements and underground parking",
+                "Contaminated water entering drinking water sumps",
+                "Severe traffic disruption on arterial roads",
+                "Risk of vehicle damage in low-lying underpasses",
+            ],
+            "citizenSolutions": [
+                {"title": "Elevate Sump Covers", "description": "Raise inspection covers above driveway level to prevent dirty floodwater from entering drinking water supply.", "actionableStep": "Seal or elevate sump covers at least 6 inches above ground level."},
+                {"title": "Clear Rooftop Drains", "description": "Dry leaves block terrace drains causing ponding that leaks into electrical conduits.", "actionableStep": "Clean terrace drain mouths and install wire-mesh leaf guards."},
+                {"title": "Install Backwater Valves", "description": "Stormwater backpressure can force sewage back through basement drains.", "actionableStep": "Have a plumber install non-return flap valves in basement drain outlets."},
+            ],
+            "municipalMitigation": [
+                {"department": "Storm Water Drains Division", "plan": "Mechanized desilting of primary culverts and secondary feeder canals.", "status": "Scheduled", "targetDate": "Before monsoon onset"},
+                {"department": "Traffic Management", "plan": "Pre-position flood barricades and diversion signage at known waterlogging hotspots.", "status": "Scheduled", "targetDate": "Before monsoon onset"},
+            ],
+            "checklist": [
+                {"id": "chk-sump", "text": "Sump cover elevated and sealed", "points": 10},
+                {"id": "chk-terrace", "text": "Terrace drains cleaned and leaf guards installed", "points": 10},
+                {"id": "chk-backwater", "text": "Basement backwater valves checked or installed", "points": 15},
+                {"id": "chk-grating", "text": "Reported any blocked road gratings via portal", "points": 10},
+            ],
+            "helpline": "Municipal Emergency: 1800-XXX-XXXX",
+        },
+        {
+            "id": "lite-monsoon-road",
+            "season": "Monsoon",
+            "seasonLabel": "Upcoming Monsoon Season",
+            "title": "Road Surface Damage & Pothole Formation",
+            "category": "Roads",
+            "severity": "High",
+            "probability": 82,
+            "expectedTimeline": "Within first 2 weeks of heavy rain",
+            "daysAway": 50,
+            "affectedZones": ["Recently repaired roads", "Utility trench backfills", "Bus route corridors", "Heavy vehicle zones"],
+            "historicalPrecedent": "Road damage complaints increase by 200% during monsoon due to water seepage into sub-base layers of recently patched roads.",
+            "problemDescription": "Water infiltration into poorly compacted road patches and utility cable trenches causes rapid pothole formation, especially on heavily trafficked routes.",
+            "citizenImpact": [
+                "Dangerous potholes forming overnight after heavy rain",
+                "Vehicle suspension damage and accident risk",
+                "Two-wheeler riders at high risk on waterlogged roads",
+                "Increased commute times due to road diversions",
+            ],
+            "citizenSolutions": [
+                {"title": "Report Pre-Monsoon Road Cracks", "description": "Existing cracks expand rapidly when water enters. Report them before monsoon.", "actionableStep": "Use the portal to flag cracked road surfaces now."},
+                {"title": "Drive with Caution After Rain", "description": "New potholes are hidden under standing water after initial showers.", "actionableStep": "Reduce speed and avoid driving through water-covered road sections."},
+            ],
+            "municipalMitigation": [
+                {"department": "Roads & Infrastructure", "plan": "Pre-monsoon hot-mix patching of identified weak spots on arterial roads.", "status": "In Progress", "targetDate": "Before monsoon onset"},
+            ],
+            "checklist": [
+                {"id": "chk-cracks", "text": "Reported visible road cracks in your area", "points": 10},
+                {"id": "chk-trench", "text": "Flagged uncompacted utility trenches", "points": 10},
+            ],
+            "helpline": "Road Maintenance Helpline: 1800-XXX-XXXX",
+        },
+    ],
+    "Summer": [
+        {
+            "id": "lite-summer-water",
+            "season": "Summer",
+            "seasonLabel": "Peak Summer Season",
+            "title": "Water Supply Shortage & Tanker Dependency",
+            "category": "Water",
+            "severity": "High",
+            "probability": 78,
+            "expectedTimeline": "Peak impact during April-May",
+            "daysAway": 120,
+            "affectedZones": ["Peripheral wards", "Elevated terrain areas", "Dense residential blocks", "New construction zones"],
+            "historicalPrecedent": "Water supply complaints peak in April-May with a 150% increase over baseline due to reservoir depletion and increased demand.",
+            "problemDescription": "Rising temperatures increase water demand while reservoir levels drop. Peripheral areas face reduced pressure and intermittent supply.",
+            "citizenImpact": [
+                "Irregular and reduced water supply schedules",
+                "Dependence on expensive private tanker water",
+                "Low pressure in upper-floor apartments",
+                "Risk of waterborne diseases from alternative sources",
+            ],
+            "citizenSolutions": [
+                {"title": "Install Rainwater Harvesting", "description": "Collect and store rainwater to supplement municipal supply during shortages.", "actionableStep": "Install rooftop rainwater collection with basic filtration."},
+                {"title": "Fix Household Leaks", "description": "Dripping taps and toilet cisterns waste significant water daily.", "actionableStep": "Inspect and fix all leaking taps, pipes and toilet flush mechanisms."},
+            ],
+            "municipalMitigation": [
+                {"department": "Water Supply Board", "plan": "Equitable tanker distribution schedule for affected wards.", "status": "Scheduled", "targetDate": "April onwards"},
+            ],
+            "checklist": [
+                {"id": "chk-leaks", "text": "Fixed all household water leaks", "points": 10},
+                {"id": "chk-harvest", "text": "Rainwater harvesting system installed or planned", "points": 20},
+                {"id": "chk-store", "text": "Emergency water storage containers cleaned and filled", "points": 10},
+            ],
+            "helpline": "Water Supply Helpline: 1800-XXX-XXXX",
+        },
+    ],
+    "Post-Monsoon": [
+        {
+            "id": "lite-postmon-dengue",
+            "season": "Post-Monsoon",
+            "seasonLabel": "Post-Monsoon Period",
+            "title": "Dengue & Vector-Borne Disease Outbreak Risk",
+            "category": "Public Safety",
+            "severity": "High",
+            "probability": 75,
+            "expectedTimeline": "September-November peak",
+            "daysAway": 90,
+            "affectedZones": ["Areas with stagnant water", "Construction sites", "Open plots", "Dense neighborhoods"],
+            "historicalPrecedent": "Dengue cases typically spike 3-4 weeks after monsoon ends due to stagnant water breeding grounds.",
+            "problemDescription": "Accumulated stagnant water from monsoon rains provides breeding grounds for Aedes mosquitoes, leading to dengue and chikungunya outbreaks.",
+            "citizenImpact": [
+                "Increased mosquito-borne illness cases",
+                "Children and elderly at higher health risk",
+                "Healthcare facility overcrowding",
+                "Lost workdays due to illness",
+            ],
+            "citizenSolutions": [
+                {"title": "Eliminate Stagnant Water", "description": "Empty all containers, flower pots, and coolers that collect rainwater.", "actionableStep": "Do a weekly dry day — empty all water-collecting containers every Sunday."},
+                {"title": "Report Stagnant Water Sites", "description": "Construction sites and open plots with standing water are major breeding grounds.", "actionableStep": "Report stagnant water accumulations via the civic portal."},
+            ],
+            "municipalMitigation": [
+                {"department": "Health & Vector Control", "plan": "Ward-level fogging drives and larval surveys in high-risk zones.", "status": "Scheduled", "targetDate": "Post-monsoon period"},
+            ],
+            "checklist": [
+                {"id": "chk-stagnant", "text": "Eliminated all stagnant water sources at home", "points": 10},
+                {"id": "chk-cooler", "text": "Cleaned and dried desert coolers and tanks", "points": 10},
+                {"id": "chk-report-water", "text": "Reported stagnant water sites in neighborhood", "points": 15},
+            ],
+            "helpline": "Health Emergency: 1800-XXX-XXXX",
+        },
+    ],
+    "Winter": [
+        {
+            "id": "lite-winter-smog",
+            "season": "Winter",
+            "seasonLabel": "Winter Season",
+            "title": "Air Quality Deterioration & Smog Advisory",
+            "category": "Public Safety",
+            "severity": "Moderate",
+            "probability": 70,
+            "expectedTimeline": "December-January peak",
+            "daysAway": 150,
+            "affectedZones": ["Industrial buffer zones", "High-traffic corridors", "Construction-heavy areas", "Low-wind zones"],
+            "historicalPrecedent": "Winter temperature inversions trap pollutants near ground level, with AQI regularly exceeding 200 in urban areas.",
+            "problemDescription": "Cold weather temperature inversions combined with construction dust and vehicle emissions create persistent smog conditions.",
+            "citizenImpact": [
+                "Respiratory issues especially for children and elderly",
+                "Reduced visibility affecting road safety",
+                "Outdoor workers face health hazards",
+                "School disruptions during severe smog days",
+            ],
+            "citizenSolutions": [
+                {"title": "Report Open Burning", "description": "Waste burning and construction debris burning are major contributors to winter smog.", "actionableStep": "Report any open waste burning to the portal immediately."},
+                {"title": "Use Public Transport", "description": "Reducing vehicle trips directly improves local air quality.", "actionableStep": "Carpool or use public transport at least 3 days a week during winter."},
+            ],
+            "municipalMitigation": [
+                {"department": "Environment & Pollution Control", "plan": "Enforce construction dust management norms and anti-burning drives.", "status": "Scheduled", "targetDate": "November onwards"},
+            ],
+            "checklist": [
+                {"id": "chk-burning", "text": "Reported any open burning in neighborhood", "points": 15},
+                {"id": "chk-transport", "text": "Using public transport or carpooling", "points": 10},
+            ],
+            "helpline": "Pollution Control Board: 1800-XXX-XXXX",
+        },
+    ],
+}
+
+
+@app.post("/api/photo/verify", response_model=PhotoVerifyResponse)
+def photo_verify_endpoint(image: UploadFile = File(...)):
+    """Lite fallback: always returns 'uncertain' since no vision model is available."""
+    contents = image.file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Image cannot be empty.")
+    return PhotoVerifyResponse(
+        decision="uncertain",
+        is_civic_issue=False,
+        confidence=0.0,
+        detected_issue="",
+        suggested_category="",
+        reason="Photo verification requires the full AI service with vision model support. This photo will be reviewed manually.",
+        unsafe_content=False,
+    )
+
+
+@app.get("/api/predictive/alerts", response_model=PredictiveAlertsListResponse)
+def predictive_alerts_endpoint(season: str = None):
+    """Lite fallback: returns template-based predictive alerts."""
+    if season and season != "All" and season in FALLBACK_ALERTS:
+        alerts = FALLBACK_ALERTS[season]
+    else:
+        # Return all alerts across seasons
+        alerts = []
+        for s_alerts in FALLBACK_ALERTS.values():
+            alerts.extend(s_alerts)
+    return PredictiveAlertsListResponse(alerts=alerts)
+
+
+@app.post("/api/predictive/check-street", response_model=StreetRiskResponse)
+def street_risk_endpoint(req: StreetRiskRequest):
+    """Lite fallback: returns template-based street risk assessment."""
+    term = req.street.lower()
+    risk_level = "Moderate"
+    probability = 65
+    hazard = "General seasonal weather-related risks. Specific risk assessment requires the full AI service."
+    action = "Monitor local conditions and report any issues via the civic portal."
+
+    if any(w in term for w in ["underpass", "low", "canal", "nala", "creek"]):
+        risk_level = "High"
+        probability = 85
+        hazard = "High flooding and waterlogging risk due to low elevation and proximity to water channels."
+        action = "Avoid during heavy rain. Ensure basement pumps are working. Install backwater valves."
+    elif any(w in term for w in ["main", "highway", "ring", "national"]):
+        risk_level = "Moderate"
+        probability = 72
+        hazard = "Road surface damage and pothole formation risk from heavy traffic combined with weather."
+        action = "Drive carefully after rain. Report potholes immediately via the portal."
+    elif any(w in term for w in ["colony", "layout", "nagar", "society"]):
+        risk_level = "Moderate"
+        probability = 60
+        hazard = "Localized drainage issues and waste accumulation during seasonal transitions."
+        action = "Ensure community drains are clear. Organize neighborhood cleanup drives."
+
+    return StreetRiskResponse(
+        zone=req.street,
+        riskLevel=risk_level,
+        probability=probability,
+        predictedHazard=hazard,
+        actionRequired=action,
     )

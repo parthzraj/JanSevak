@@ -1,6 +1,6 @@
 import io
 import base64
-from typing import Dict
+from typing import Dict, Any
 from PIL import Image
 from app.modules.ollama_client import call_ollama_vision, call_ollama_text
 
@@ -85,7 +85,7 @@ Answer in 3 concise points:
     }
 
 
-def prepare_complaint_with_image(image_bytes: bytes, issue: str = "", location: str = "") -> Dict[str, str]:
+def prepare_complaint_with_image(image_bytes: bytes, issue: str = "", location: str = "") -> Dict[str, Any]:
     """Combines photo vision analysis with formal text drafting."""
     analysis = analyze_civic_image(image_bytes)
 
@@ -99,4 +99,5 @@ def prepare_complaint_with_image(image_bytes: bytes, issue: str = "", location: 
         "description": analysis["visual_description"],
         "category": analysis["suggested_category"],
         "severity": analysis["suggested_severity"],
+        "confidence": 0.85,
     }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -26,7 +26,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { PREDICTIVE_ALERTS } from '../mockData/predictiveAlertsData';
+import { fetchPredictiveAlerts, checkStreetRisk } from '../lib/api';
 import { AlertSeason, PredictiveAlert } from '../types';
 
 export const PredictiveAlertsScreen: React.FC = () => {
@@ -40,6 +40,33 @@ export const PredictiveAlertsScreen: React.FC = () => {
     const saved = localStorage.getItem('praja_predictive_checklist');
     return saved ? JSON.parse(saved) : {};
   });
+
+  const [alerts, setAlerts] = useState<PredictiveAlert[]>([]);
+  const [isLoadingAlerts, setIsLoadingAlerts] = useState(true);
+  const [isCheckingStreet, setIsCheckingStreet] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadAlerts = async () => {
+      setIsLoadingAlerts(true);
+      try {
+        const seasonParam = selectedSeason === 'All' ? undefined : selectedSeason;
+        const data = await fetchPredictiveAlerts(seasonParam);
+        if (!cancelled && data.alerts) {
+          setAlerts(data.alerts as PredictiveAlert[]);
+        }
+      } catch (err) {
+        console.error('Failed to load predictive alerts:', err);
+        if (!cancelled) {
+          addToast('AI Service Unavailable', 'Could not load predictive alerts. The AI service may be offline.', 'info');
+        }
+      } finally {
+        if (!cancelled) setIsLoadingAlerts(false);
+      }
+    };
+    loadAlerts();
+    return () => { cancelled = true; };
+  }, [selectedSeason]);
 
   // Street Risk Checker interactive state
   const [searchStreet, setSearchStreet] = useState('');
@@ -60,11 +87,7 @@ export const PredictiveAlertsScreen: React.FC = () => {
   ];
 
   // Sort by probability descending (highest probability upcoming hazards first)
-  const filteredAlerts = PREDICTIVE_ALERTS
-    .filter((alert) => {
-      if (selectedSeason === 'All') return true;
-      return alert.season === selectedSeason;
-    })
+  const filteredAlerts = alerts
     .sort((a, b) => b.probability - a.probability);
 
   const toggleChecklistItem = (item: { id: string; text: string }) => {
@@ -89,46 +112,27 @@ export const PredictiveAlertsScreen: React.FC = () => {
     }
   };
 
-  const handleStreetCheck = (e: React.FormEvent) => {
+  const handleStreetCheck = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchStreet.trim()) return;
-
-    const term = searchStreet.toLowerCase();
-    let result = {
-      zone: searchStreet,
-      riskLevel: 'Moderate' as 'High' | 'Moderate' | 'Low',
-      probability: 72,
-      predictedHazard: 'Localized runoff ponding & gutter leaf blockages',
-      actionRequired: 'Ensure balcony & terrace drain mouths have mesh wire filters installed.',
-    };
-
-    if (term.includes('100ft') || term.includes('underpass') || term.includes('4th cross') || term.includes('low')) {
-      result = {
-        zone: searchStreet,
-        riskLevel: 'High',
-        probability: 91,
-        predictedHazard: 'Severe stormwater drain backflow & basement inundation during heavy downpours',
-        actionRequired: 'Inspect and elevate sump lids above driveway grade; install non-return flap valves in basement outlets.',
-      };
-    } else if (term.includes('main') || term.includes('defense') || term.includes('hal') || term.includes('tree')) {
-      result = {
-        zone: searchStreet,
-        riskLevel: 'High',
-        probability: 78,
-        predictedHazard: 'Overhead 11kV electrical wire contact with brittle canopy tree branches in squall gusts',
-        actionRequired: 'Check for leaning or hollow branches; report overhangs to BESCOM (1912) before storms.',
-      };
-    } else if (term.includes('road') || term.includes('metro') || term.includes('cmh')) {
-      result = {
+    setIsCheckingStreet(true);
+    try {
+      const result = await checkStreetRisk(searchStreet.trim());
+      setStreetSimulationResult(result);
+    } catch (err) {
+      console.error('Street risk check failed:', err);
+      // Fallback to a generic response
+      setStreetSimulationResult({
         zone: searchStreet,
         riskLevel: 'Moderate',
-        probability: 88,
-        predictedHazard: 'Sub-base settling in recently backfilled utility cable trenches forming potholes',
-        actionRequired: 'Drive with caution during initial drizzle; log uncompacted trenches via Praja portal.',
-      };
+        probability: 65,
+        predictedHazard: 'Could not assess risk — AI service may be offline. General seasonal precautions recommended.',
+        actionRequired: 'Check local drainage and report any visible issues via the portal.',
+      });
+      addToast('AI Unavailable', 'Using estimated risk assessment.', 'info');
+    } finally {
+      setIsCheckingStreet(false);
     }
-
-    setStreetSimulationResult(result);
   };
 
   return (
@@ -221,9 +225,10 @@ export const PredictiveAlertsScreen: React.FC = () => {
           />
           <button
             type="submit"
-            className="px-4 py-2 bg-[#0f2d59] hover:bg-[#1d4e8c] dark:bg-blue-600 dark:hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors shrink-0 shadow-xs cursor-pointer"
+            disabled={isCheckingStreet}
+            className="px-4 py-2 bg-[#0f2d59] hover:bg-[#1d4e8c] dark:bg-blue-600 dark:hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors shrink-0 shadow-xs cursor-pointer disabled:opacity-50"
           >
-            Assess Risk
+            {isCheckingStreet ? 'Analyzing...' : 'Assess Risk'}
           </button>
         </form>
 
@@ -279,6 +284,17 @@ export const PredictiveAlertsScreen: React.FC = () => {
       </div>
 
       {/* Predictive Hazard Cards List */}
+      {isLoadingAlerts ? (
+        <div className="flex flex-col items-center justify-center py-12 space-y-3">
+          <span className="w-8 h-8 border-3 border-[#0f2d59] border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-bold text-[#64748b]">AI is generating predictive alerts...</span>
+        </div>
+      ) : filteredAlerts.length === 0 ? (
+        <div className="text-center py-12">
+          <AlertTriangle className="w-8 h-8 text-[#cbd5e1] mx-auto mb-2" />
+          <p className="text-xs font-bold text-[#64748b]">No predictions available for this season yet.</p>
+        </div>
+      ) : (
       <div className="space-y-4">
         {filteredAlerts.map((alert) => {
           const isExpanded = expandedAlertId === alert.id;
@@ -586,6 +602,7 @@ export const PredictiveAlertsScreen: React.FC = () => {
           );
         })}
       </div>
+      )}
 
       {/* 24x7 Ward Emergency Support Hub */}
       <div className="bg-gradient-to-r from-slate-900 to-[#0f2d59] text-white rounded-3xl p-4 sm:p-5 space-y-2.5 shadow-md">

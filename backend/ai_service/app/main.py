@@ -12,6 +12,8 @@ from app.schemas import (
     FeedPrioritizationRequest, FeedPrioritizationResponse,
     SuggestiveRemarksRequest, SuggestiveRemarksResponse,
     ImageAnalysisResponse, PrepareWithImageResponse,
+    PhotoVerifyResponse, PredictiveAlertsListResponse,
+    StreetRiskRequest, StreetRiskResponse,
 )
 from app.modules.chatbot import chat_with_prajapulse
 from app.modules.complaint_generator import generate_complaint
@@ -20,6 +22,8 @@ from app.modules.hazard_detector import detect_hazard
 from app.modules.feed_prioritizer import prioritize_complaints
 from app.modules.suggestive_remarks import generate_suggestive_remarks
 from app.modules.image_analyzer import analyze_civic_image, prepare_complaint_with_image
+from app.modules.photo_verifier import verify_photo
+from app.modules.predictive_engine import get_predictive_alerts, check_street_risk
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("prajapulse-ai")
@@ -223,3 +227,56 @@ def prepare_with_image_endpoint(
     except Exception as e:
         logger.exception("Error in prepare with image")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/photo/verify", response_model=PhotoVerifyResponse)
+def photo_verify_endpoint(image: UploadFile = File(...)):
+    """Verify if an uploaded photo is a real civic issue (not selfie/meme/food)."""
+    try:
+        contents = image.file.read()
+        result = verify_photo(contents)
+        return PhotoVerifyResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ConnectionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except TimeoutError as e:
+        raise HTTPException(status_code=504, detail=str(e))
+    except Exception as e:
+        logger.exception("Error in photo verification")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/predictive/alerts", response_model=PredictiveAlertsListResponse)
+def predictive_alerts_endpoint(season: str = None):
+    """Get AI-generated predictive civic alerts for a given season."""
+    try:
+        alerts = get_predictive_alerts(season)
+        return PredictiveAlertsListResponse(alerts=alerts)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ConnectionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except TimeoutError as e:
+        raise HTTPException(status_code=504, detail=str(e))
+    except Exception as e:
+        logger.exception("Error in predictive alerts")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/predictive/check-street", response_model=StreetRiskResponse)
+def street_risk_endpoint(req: StreetRiskRequest):
+    """AI-powered street/area hazard risk assessment."""
+    try:
+        result = check_street_risk(req.street)
+        return StreetRiskResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ConnectionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except TimeoutError as e:
+        raise HTTPException(status_code=504, detail=str(e))
+    except Exception as e:
+        logger.exception("Error in street risk check")
+        raise HTTPException(status_code=500, detail=str(e))
+

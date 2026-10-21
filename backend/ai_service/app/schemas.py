@@ -76,3 +76,70 @@ class PrepareWithImageResponse(BaseModel):
     description: str
     category: str
     severity: str
+    confidence: float = 0.85
+
+
+class PhotoVerifyResponse(BaseModel):
+    decision: str  # "pass", "reject", or "uncertain"
+    is_civic_issue: bool
+    confidence: float
+    detected_issue: str
+    suggested_category: str
+    reason: str
+    unsafe_content: bool
+
+
+class CitizenSolution(BaseModel):
+    title: str
+    description: str
+    actionableStep: str
+
+
+class MunicipalMitigation(BaseModel):
+    department: str
+    plan: str
+    status: str  # 'Scheduled', 'In Progress', 'Completed'
+    targetDate: str
+
+
+class ChecklistItem(BaseModel):
+    id: str
+    text: str
+    points: int
+
+
+class PredictiveAlertResponse(BaseModel):
+    id: str
+    season: str
+    seasonLabel: str
+    title: str
+    category: str
+    severity: str
+    probability: int
+    expectedTimeline: str
+    daysAway: int
+    affectedZones: List[str]
+    historicalPrecedent: str
+    problemDescription: str
+    citizenImpact: List[str]
+    citizenSolutions: List[CitizenSolution]
+    municipalMitigation: List[MunicipalMitigation]
+    checklist: List[ChecklistItem]
+    helpline: str
+
+
+class PredictiveAlertsListResponse(BaseModel):
+    alerts: List[PredictiveAlertResponse]
+
+
+class StreetRiskRequest(BaseModel):
+    street: str = Field(..., min_length=1, description="Street or area name to check")
+
+
+class StreetRiskResponse(BaseModel):
+    zone: str
+    riskLevel: str  # 'High', 'Moderate', 'Low'
+    probability: int
+    predictedHazard: str
+    actionRequired: str
+

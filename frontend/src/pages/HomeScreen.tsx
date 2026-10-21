@@ -1,10 +1,59 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { ShieldAlert } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DailyBriefingCard } from '../components/feed/DailyBriefingCard';
 import { FeedPostCard } from '../components/feed/FeedPostCard';
 
 export const HomeScreen: React.FC = () => {
   const { user, posts } = useApp();
+
+  const [criticalSort, setCriticalSort] = useState(false);
+  const [sortedPosts, setSortedPosts] = useState<typeof posts | null>(null);
+  const [isSorting, setIsSorting] = useState(false);
+
+  const displayPosts = criticalSort && sortedPosts ? sortedPosts : posts;
+
+  const handleCriticalSort = async () => {
+    if (criticalSort) {
+      setCriticalSort(false);
+      setSortedPosts(null);
+      return;
+    }
+    setIsSorting(true);
+    try {
+      const { default: api } = await import('../lib/api');
+      // Build complaint objects from posts
+      const complaints = posts.map(p => ({
+        id: String(p.id),
+        title: p.title,
+        description: p.description?.substring(0, 100) || '',
+        category: p.category,
+      }));
+      
+      const AI_API_BASE_URL = (import.meta.env.VITE_AI_API_URL || `http://${window.location.hostname}:8001`).replace(/\/$/, '');
+      const response = await fetch(`${AI_API_BASE_URL}/api/feed/prioritize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ complaints }),
+      });
+      if (!response.ok) throw new Error('Failed');
+      const data = await response.json();
+      
+      // Reorder posts based on ranked_ids
+      const idOrder = new Map(data.ranked_ids.map((id: string, idx: number) => [id, idx]));
+      const sorted = [...posts].sort((a, b) => {
+        const orderA = idOrder.get(String(a.id)) ?? 999;
+        const orderB = idOrder.get(String(b.id)) ?? 999;
+        return (orderA as number) - (orderB as number);
+      });
+      setSortedPosts(sorted);
+      setCriticalSort(true);
+    } catch (err) {
+      console.error('Critical sort failed:', err);
+    } finally {
+      setIsSorting(false);
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col px-3.5 sm:px-4 pt-3 space-y-4">
@@ -43,9 +92,28 @@ export const HomeScreen: React.FC = () => {
       {/* 7:00 AM City Briefing Clickable Banner */}
       <DailyBriefingCard />
 
+      {/* AI Critical Sort Toggle */}
+      {posts.length > 1 && (
+        <div className="flex items-center justify-end">
+          <button
+            type="button"
+            onClick={handleCriticalSort}
+            disabled={isSorting}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              criticalSort
+                ? 'bg-red-50 text-red-700 border border-red-200 shadow-xs'
+                : 'bg-white text-[#475569] border border-[#cbd5e1] hover:bg-slate-50'
+            } disabled:opacity-50`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            {isSorting ? 'Sorting...' : criticalSort ? 'Critical First ✓' : 'Critical First (AI)'}
+          </button>
+        </div>
+      )}
+
       {/* Main Civic Feed Post Cards */}
       <div id="civic-feed-section" className="space-y-4">
-        {posts.map((post) => (
+        {displayPosts.map((post) => (
           <FeedPostCard key={post.id} post={post} />
         ))}
       </div>
