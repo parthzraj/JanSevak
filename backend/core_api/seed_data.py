@@ -27,6 +27,7 @@ from app.models import (  # noqa: E402
     CivicIssue,
     Contest,
     Course,
+    ImpactReaction,
     IssueComment,
     IssueTimelineEvent,
     IssueVote,
@@ -96,7 +97,33 @@ ISSUES = [
         "Parks", "Low", "Defence Colony Park, Indiranagar, Bengaluru", 12.9765, 77.6371, "Resolved",
         ["ayush@example.com", "rahul@example.com"],
     ),
+    (
+        "rahul@example.com",
+        "Overflowing dustbins at the market junction",
+        "The bins at the 10th Main market junction were overflowing onto the road for over a week, attracting stray "
+        "animals and a terrible smell for every shopkeeper nearby.",
+        "Sanitation", "High", "10th Main Market Junction, Indiranagar, Bengaluru", 12.9784, 77.6408, "Resolved",
+        ["ayush@example.com", "priya@example.com"],
+    ),
+    (
+        "ayush@example.com",
+        "Blocked storm drain flooding the crossing",
+        "The storm drain beside the zebra crossing was choked with silt. Every drizzle left a knee-deep pool right "
+        "where schoolchildren cross.",
+        "Water", "Critical", "Double Road Crossing, Indiranagar, Bengaluru", 12.9741, 77.6402, "Resolved",
+        ["priya@example.com", "rahul@example.com"],
+    ),
 ]
+
+# Demo "before / after" photos and the official's closing note for the resolved sample issues.
+BEFORE_AFTER = {
+    "Broken benches and swings in the neighbourhood park": (
+        "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1080&q=80", "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1080&q=80", "Benches re-planked and the swing chain replaced; the play area was reopened."),
+    "Overflowing dustbins at the market junction": (
+        "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=1080&q=80", "https://images.unsplash.com/photo-1530587191325-3db32d826c18?auto=format&fit=crop&w=1080&q=80", "8 tons of waste cleared, street sanitised and 3 covered bins installed."),
+    "Blocked storm drain flooding the crossing": (
+        "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?auto=format&fit=crop&w=1080&q=80", "https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?auto=format&fit=crop&w=1080&q=80", "Silt removed over a 1.2 km stretch; the crossing now stays dry in rain."),
+}
 
 
 # Civic Academy sample courses (text + tasks; add video lessons from NGO Studio -> Courses with a YouTube link).
@@ -230,6 +257,13 @@ def main() -> None:
                 upvotes=len(voters),
                 created_at=utcnow() - ago,
             )
+            if state == "Resolved" and title in BEFORE_AFTER:
+                before, after, note = BEFORE_AFTER[title]
+                issue.image_urls = json.dumps([before])
+                issue.resolution_image_urls = json.dumps([after])
+                issue.resolution_note = note
+            if state == "Resolved":
+                issue.resolved_at = min(issue.created_at + timedelta(days=2 + i % 3), utcnow() - timedelta(hours=2))
             db.add(issue)
             db.flush()
 

@@ -36,6 +36,10 @@ class CivicIssue(Base):
     # Set when the reporter (or an admin) deletes the report. The row stays as an empty tombstone so the id is never
     # reused (reward de-duplication is keyed by issue id), but it is hidden from every query.
     deleted_at = Column(UTCDateTime, nullable=True, index=True)
+    # Filled when an official marks the issue Resolved: the "after" photo(s) shown in Impact Reels.
+    resolution_image_urls = Column(Text, nullable=False, default="[]")  # JSON array of strings
+    resolution_note = Column(String(500), nullable=True)
+    resolved_at = Column(UTCDateTime, nullable=True, index=True)
 
     reporter = relationship("User", lazy="joined")
     comments = relationship(
@@ -58,6 +62,15 @@ class CivicIssue(Base):
     def images(self) -> list[str]:
         try:
             value = json.loads(self.image_urls or "[]")
+            return [str(v) for v in value] if isinstance(value, list) else []
+        except (ValueError, TypeError):
+            return []
+
+
+    @property
+    def resolution_images(self) -> list[str]:
+        try:
+            value = json.loads(self.resolution_image_urls or "[]")
             return [str(v) for v in value] if isinstance(value, list) else []
         except (ValueError, TypeError):
             return []
@@ -117,3 +130,28 @@ class IssueEvidence(Base):
 
     issue = relationship("CivicIssue", back_populates="evidence")
     author = relationship("User", lazy="joined")
+
+
+class ImpactReaction(Base):
+    """A citizen's like or bookmark on an Impact Reel (a resolved issue). One row per (issue, user, kind)."""
+
+    __tablename__ = "impact_reactions"
+    __table_args__ = (UniqueConstraint("issue_id", "user_id", "kind", name="uq_impact_reaction"),)
+
+    id = Column(Integer, primary_key=True)
+    issue_id = Column(Integer, ForeignKey("civic_issues.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    kind = Column(String(10), nullable=False)  # like | save
+    created_at = Column(UTCDateTime, nullable=False, default=utcnow)
+
+
+class ImpactShare(Base):
+    """One row per share tap (whatsapp, x, telegram, copy, native), so the reel's share count is real."""
+
+    __tablename__ = "impact_shares"
+
+    id = Column(Integer, primary_key=True)
+    issue_id = Column(Integer, ForeignKey("civic_issues.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    channel = Column(String(20), nullable=False)
+    created_at = Column(UTCDateTime, nullable=False, default=utcnow)

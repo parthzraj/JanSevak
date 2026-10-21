@@ -811,6 +811,86 @@ def test_deleted_report_disappears_everywhere(client, make_user):
     assert client.get("/api/analytics/summary", headers=h).json()["mine"]["total"] == 1
 
 
+# ---------------------------------------------------------------- impact reels
+def _resolved_issue(client, make_user, official_headers, after=None, email="rep@example.com"):
+    h, _ = make_user(email=email)
+    iid = client.post("/api/issues", json=ISSUE, headers=h).json()["issue"]["id"]
+    body = {"status": "Resolved", "note": "Fixed it"}
+    if after:
+        body["after_image_urls"] = after
+    for st in ("Under Review", "In Progress"):
+        client.patch(f"/api/issues/{iid}/status", json={"status": st}, headers=official_headers)
+    assert client.patch(f"/api/issues/{iid}/status", json=body, headers=official_headers).status_code == 200
+    return h, iid
+
+
+def test_reels_only_contain_resolved_issues_with_real_counts(client, make_user, official_headers):
+    h, iid = _resolved_issue(client, make_user, official_headers, after=["/uploads/x.jpg"])
+    other, _ = make_user(email="viewer@example.com")
+    client.post("/api/issues", json={**ISSUE, "title": "Still open pothole"}, headers=other)  # not a reel
+
+    reels = client.get("/api/impact/reels").json()
+    assert reels["total"] == 1
+    r = reels["items"][0]
+    assert r["id"] == iid and r["after_image"] == "/uploads/x.jpg" and r["resolution_note"] == "Fixed it"
+    assert r["likes"] == 0 and r["shares"] == 0 and r["has_liked"] is False
+
+    like = client.post(f"/api/impact/reels/{iid}/like", headers=other).json()
+    assert like["likes"] == 1 and like["has_liked"] is True
+    assert client.post(f"/api/impact/reels/{iid}/like", headers=other).json()["likes"] == 1  # idempotent
+    client.post(f"/api/issues/{iid}/comments", json={"text": "great"}, headers=other)
+    assert client.post(f"/api/impact/reels/{iid}/share", json={"channel": "whatsapp"}).json()["shares"] == 1
+
+    mine = client.get("/api/impact/reels", headers=other).json()["items"][0]
+    assert (mine["likes"], mine["comments_count"], mine["shares"], mine["has_liked"]) == (1, 1, 1, True)
+    assert client.get("/api/impact/reels").json()["items"][0]["has_liked"] is False  # anonymous
+
+    assert client.delete(f"/api/impact/reels/{iid}/like", headers=other).json()["likes"] == 0
+
+
+def test_reel_save_and_saved_filter(client, make_user, official_headers):
+    _, a = _resolved_issue(client, make_user, official_headers, email="a1@example.com")
+    _, b = _resolved_issue(client, make_user, official_headers, email="b1@example.com")
+    v, _ = make_user(email="v1@example.com")
+    assert client.post(f"/api/impact/reels/{a}/save", headers=v).json()["is_saved"] is True
+    saved = client.get("/api/impact/reels?saved=true", headers=v).json()
+    assert [r["id"] for r in saved["items"]] == [a] and b not in [r["id"] for r in saved["items"]]
+    assert client.get("/api/impact/reels?saved=true").status_code == 401
+    assert client.delete(f"/api/impact/reels/{a}/save", headers=v).json()["is_saved"] is False
+
+
+def test_reel_actions_reject_unresolved_and_anonymous(client, make_user):
+    h, _ = make_user()
+    iid = client.post("/api/issues", json=ISSUE, headers=h).json()["issue"]["id"]
+    assert client.post(f"/api/impact/reels/{iid}/like", headers=h).status_code == 404
+    assert client.post(f"/api/impact/reels/{iid}/share", json={"channel": "copy"}).status_code == 404
+    assert client.post(f"/api/impact/reels/{iid}/like").status_code == 401
+    assert client.post("/api/impact/reels/999/save", headers=h).status_code == 404
+
+
+def test_after_image_urls_must_be_own_uploads(client, make_user, official_headers):
+    h, _ = make_user()
+    iid = client.post("/api/issues", json=ISSUE, headers=h).json()["issue"]["id"]
+    r = client.patch(
+        f"/api/issues/{iid}/status",
+        json={"status": "Resolved", "after_image_urls": ["https://evil.example/x.png"]},
+        headers=official_headers,
+    )
+    assert r.status_code == 422
+
+
+def test_impact_stats_are_computed(client, make_user, official_headers):
+    empty = client.get("/api/impact/stats").json()
+    assert empty["resolved_total"] == 0 and empty["avg_days_to_resolve"] is None
+    _resolved_issue(client, make_user, official_headers, after=["/uploads/y.jpg"], email="s1@example.com")
+    h, _ = make_user(email="s2@example.com")
+    client.post("/api/issues", json={**ISSUE, "title": "Open one here"}, headers=h)
+    s = client.get("/api/impact/stats").json()
+    assert s["reports_total"] == 2 and s["resolved_total"] == 1 and s["resolution_rate"] == 50
+    assert s["resolved_last_30_days"] == 1 and s["with_after_photo"] == 1 and s["citizens_reporting"] == 1
+    assert s["by_category"] == [{"category": ISSUE["category"], "resolved": 1}]
+
+
 # ---------------------------------------------------------------- civic drives (campaigns) and NGO vacancies
 from datetime import datetime, timedelta, timezone  # noqa: E402
 

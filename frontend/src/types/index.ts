@@ -108,31 +108,25 @@ export interface DailyBriefing {
   };
 }
 
+/** An Impact Reel: a resolved issue with its before/after photos and live engagement counts. */
 export interface ReelStory {
   id: string;
   title: string;
   caption: string;
-  creator: {
-    name: string;
-    avatar: string;
-    role: string;
-  };
-  locality: string;
-  beforeAfter?: {
-    beforeLabel: string;
-    afterLabel: string;
-  };
-  mediaUrl: string;
-  gradientTheme: string;
   category: CivicCategory;
+  locality: string;
+  creator: { id: string; name: string; avatar: string; ward: string };
+  beforeImage: string | null;
+  afterImage: string | null;
+  resolutionNote: string | null;
+  resolvedAt: string;
+  daysToResolve: number;
+  supporters: number;
   likes: number;
-  hasLiked?: boolean;
   commentsCount: number;
-  comments: { id: string; author: string; text: string; time: string }[];
   shares: number;
-  isSaved?: boolean;
-  impactStat: string;
-  daysToResolve?: string;
+  hasLiked: boolean;
+  isSaved: boolean;
 }
 
 export interface UserNotification {

@@ -1,516 +1,433 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  Heart,
-  MessageCircle,
-  Share2,
-  Bookmark,
-  Sparkles,
-  Award,
-  CheckCircle2,
-  MapPin,
-  Clock,
-  X,
-  Send,
-  Volume2,
-  VolumeX,
-} from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Bookmark, CheckCircle2, Clock, Heart, MapPin, MessageCircle, Share2, Sparkles, BarChart3, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { getReel, getReels, recordReelShare, setReelLike, setReelSave } from '../lib/reelsApi';
+import { reelFallbackImage, toReel } from '../lib/mappers';
+import { useProfileLink } from '../lib/useProfileLink';
+import { Avatar } from '../components/common/Avatar';
+import type { ReelStory } from '../types';
+import { BeforeAfterSlider } from '../components/impact/BeforeAfterSlider';
+import { ReelShareSheet, type ShareChannel } from '../components/impact/ReelShareSheet';
+import { ReelCommentsSheet } from '../components/impact/ReelCommentsSheet';
+import { ImpactStatsSheet } from '../components/impact/ImpactStatsSheet';
+
+type Tab = 'all' | 'saved';
+const SWIPE_PX = 60;
 
 export const PositiveImpactScreen: React.FC = () => {
-  const navigate = useNavigate();
-  const {
-    reels,
-    toggleReelLike,
-    toggleReelSave,
-    addReelComment,
-    addToast,
-    user,
-  } = useApp();
+  const { addToast } = useApp();
+  const openProfile = useProfileLink();
+  const [params] = useSearchParams();
+  const sharedId = params.get('story');
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [showImpactDrawer, setShowImpactDrawer] = useState(false);
-  const [showCommentsDrawer, setShowCommentsDrawer] = useState(false);
-  const [reelCommentInput, setReelCommentInput] = useState('');
-  const [heartAnimId, setHeartAnimId] = useState<string | null>(null);
-  const [showSwipeHint, setShowSwipeHint] = useState(true);
+  const [tab, setTab] = useState<Tab>('all');
+  const [reels, setReels] = useState<ReelStory[]>([]);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [index, setIndex] = useState(0);
+  const [dragY, setDragY] = useState(0);
+  const [animating, setAnimating] = useState(false);
+  const [heartId, setHeartId] = useState<string | null>(null);
+  const [panel, setPanel] = useState<null | 'comments' | 'share' | 'stats'>(null);
+  const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
 
-  // Touch tracking for mobile swipe gesture
-  const touchStartY = useRef<number | null>(null);
-  const touchStartTime = useRef<number>(0);
-  const isScrollingRef = useRef<boolean>(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const start = useRef<{ x: number; y: number; t: number } | null>(null);
+  const axis = useRef<'v' | 'h' | null>(null);
+  const wheelLock = useRef(0);
+  const busy = useRef<Set<string>>(new Set());
 
-  if (reels.length === 0) return <div>No stories yet</div>;
-  const currentReel = reels[activeIndex] || reels[0];
-
-  // Sync active index with snap-scroll position
-  const handleScroll = useCallback(() => {
-    if (!containerRef.current) return;
-    const { scrollTop, clientHeight } = containerRef.current;
-    if (clientHeight > 0) {
-      const newIndex = Math.round(scrollTop / clientHeight);
-      if (newIndex !== activeIndex && newIndex >= 0 && newIndex < reels.length) {
-        setActiveIndex(newIndex);
-        setShowSwipeHint(false);
+  const load = useCallback(async () => {
+    setStatus('loading');
+    try {
+      const list = (await getReels(1, tab === 'saved', 30)).items.map(toReel);
+      // A shared link opens that story first, even if it is not on the first page.
+      if (tab === 'all' && sharedId && !list.some((r) => r.id === sharedId)) {
+        try {
+          list.unshift(toReel(await getReel(sharedId)));
+        } catch {
+          /* story removed: just show the feed */
+        }
+      } else if (tab === 'all' && sharedId) {
+        list.sort((a, b) => (a.id === sharedId ? -1 : b.id === sharedId ? 1 : 0));
       }
+      setReels(list);
+      setIndex(0);
+      setStatus('ready');
+    } catch {
+      setStatus('error');
     }
-  }, [activeIndex, reels.length]);
+  }, [tab, sharedId]);
 
-  const scrollToReel = useCallback((index: number) => {
-    if (!containerRef.current) return;
-    const clientHeight = containerRef.current.clientHeight;
-    containerRef.current.scrollTo({
-      top: index * clientHeight,
-      behavior: 'smooth',
-    });
-    setActiveIndex(index);
-    setShowSwipeHint(false);
-  }, []);
-
-  const handleNext = () => {
-    if (activeIndex < reels.length - 1) {
-      scrollToReel(activeIndex + 1);
-    } else {
-      scrollToReel(0); // loop to first
-    }
-  };
-
-  const handlePrev = () => {
-    if (activeIndex > 0) {
-      scrollToReel(activeIndex - 1);
-    } else {
-      scrollToReel(reels.length - 1);
-    }
-  };
-
-  // Keyboard Navigation (Arrow Up / Down)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        handleNext();
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        handlePrev();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeIndex, reels.length]);
+    load();
+  }, [load]);
 
-  // Touch Gesture Handling
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-    touchStartTime.current = Date.now();
+  const current = reels[index];
+  const patch = (id: string, change: Partial<ReelStory>) =>
+    setReels((prev) => prev.map((r) => (r.id === id ? { ...r, ...change } : r)));
+
+  const go = useCallback(
+    (to: number) => {
+      if (to < 0 || to >= reels.length || to === index) return;
+      setAnimating(true);
+      setDragY(0);
+      setIndex(to);
+      window.setTimeout(() => setAnimating(false), 320);
+    },
+    [index, reels.length]
+  );
+
+  // ---- swipe (touch / mouse / pen): the page follows the finger, then snaps to the next or previous reel
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (panel) return;
+    start.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+    axis.current = null;
   };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartY.current === null) return;
-    const touchEndY = e.changedTouches[0].clientY;
-    const diffY = touchStartY.current - touchEndY;
-    const duration = Date.now() - touchStartTime.current;
-
-    // Fast flick or clear swipe (> 45px or velocity)
-    if (Math.abs(diffY) > 45 || (Math.abs(diffY) > 25 && duration < 250)) {
-      if (diffY > 0 && activeIndex < reels.length - 1) {
-        scrollToReel(activeIndex + 1);
-      } else if (diffY < 0 && activeIndex > 0) {
-        scrollToReel(activeIndex - 1);
+  const onPointerMove = (e: React.PointerEvent) => {
+    const s = start.current;
+    if (!s) return;
+    const dx = e.clientX - s.x;
+    const dy = e.clientY - s.y;
+    if (!axis.current && Math.max(Math.abs(dx), Math.abs(dy)) > 8) {
+      axis.current = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
+      // Once it is a vertical swipe, keep receiving the gesture even if the finger / cursor ends up over
+      // another element (for example the chat button). Capturing only now keeps plain taps working.
+      if (axis.current === 'v') {
+        try {
+          boxRef.current?.setPointerCapture(e.pointerId);
+        } catch {
+          /* pointer already gone */
+        }
       }
     }
-    touchStartY.current = null;
+    if (axis.current !== 'v') return;
+    // resist at the ends instead of dragging into empty space
+    const atEdge = (dy > 0 && index === 0) || (dy < 0 && index === reels.length - 1);
+    setDragY(atEdge ? dy / 4 : dy);
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    const s = start.current;
+    start.current = null;
+    if (!s || axis.current !== 'v') {
+      setDragY(0);
+      return;
+    }
+    const dy = e.clientY - s.y;
+    const fast = Date.now() - s.t < 250 && Math.abs(dy) > 25;
+    setAnimating(true);
+    if ((Math.abs(dy) > SWIPE_PX || fast) && dy < 0) go(index + 1);
+    else if ((Math.abs(dy) > SWIPE_PX || fast) && dy > 0) go(index - 1);
+    else setDragY(0);
+    window.setTimeout(() => setAnimating(false), 320);
   };
 
-  // Double-tap to Like
-  const handleDoubleTap = (reelId: string) => {
-    toggleReelLike(reelId);
-    setHeartAnimId(reelId);
-    setTimeout(() => {
-      setHeartAnimId(null);
-    }, 850);
+  // mouse wheel / trackpad and arrow keys for desktop
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (panel || Math.abs(e.deltaY) < 12) return;
+      e.preventDefault();
+      const now = Date.now();
+      if (now - wheelLock.current < 450) return;
+      wheelLock.current = now;
+      go(index + (e.deltaY > 0 ? 1 : -1));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [go, index, panel]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (panel || (e.target instanceof HTMLElement && ['INPUT', 'TEXTAREA'].includes(e.target.tagName))) return;
+      if (e.key === 'ArrowDown') go(index + 1);
+      if (e.key === 'ArrowUp') go(index - 1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [go, index, panel]);
+
+  // ---- live actions (optimistic, rolled back if the server says no)
+  const toggleLike = async (reel: ReelStory) => {
+    const key = `like-${reel.id}`;
+    if (busy.current.has(key)) return;
+    busy.current.add(key);
+    const next = !reel.hasLiked;
+    patch(reel.id, { hasLiked: next, likes: Math.max(0, reel.likes + (next ? 1 : -1)) });
+    try {
+      const res = await setReelLike(reel.id, next);
+      patch(reel.id, { hasLiked: res.has_liked, likes: res.likes });
+    } catch {
+      patch(reel.id, { hasLiked: reel.hasLiked, likes: reel.likes });
+      addToast('Could not update your like', 'Check your connection and try again.', 'info');
+    } finally {
+      busy.current.delete(key);
+    }
   };
 
-  const handleShareReel = (reelTitle: string) => {
-    navigator.clipboard?.writeText?.(window.location.href);
-    addToast('Reel Link Copied!', `Shared "${reelTitle}" impact with neighbors.`, 'success');
+  const toggleSave = async (reel: ReelStory) => {
+    const key = `save-${reel.id}`;
+    if (busy.current.has(key)) return;
+    busy.current.add(key);
+    const next = !reel.isSaved;
+    patch(reel.id, { isSaved: next });
+    try {
+      const res = await setReelSave(reel.id, next);
+      patch(reel.id, { isSaved: res.is_saved });
+      addToast(next ? 'Story saved' : 'Removed from saved', next ? 'Find it under the Saved tab.' : undefined, 'info');
+    } catch {
+      patch(reel.id, { isSaved: reel.isSaved });
+      addToast('Could not save this story', 'Check your connection and try again.', 'info');
+    } finally {
+      busy.current.delete(key);
+    }
   };
 
-  const handlePostReelComment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reelCommentInput.trim()) return;
-    addReelComment(currentReel.id, reelCommentInput.trim());
-    setReelCommentInput('');
+  const doubleTapLike = (reel: ReelStory) => {
+    if (!reel.hasLiked) toggleLike(reel);
+    setHeartId(reel.id);
+    window.setTimeout(() => setHeartId(null), 800);
   };
+
+  const onShared = async (channel: ShareChannel) => {
+    if (!current) return;
+    if (channel === 'copy') addToast('Link copied', 'Paste it anywhere to share this story.', 'success');
+    setPanel(null);
+    try {
+      const res = await recordReelShare(current.id, channel);
+      patch(current.id, { shares: res.shares });
+    } catch {
+      /* the share itself worked; only the counter missed */
+    }
+  };
+
+  const mediaFor = (r: ReelStory) => r.afterImage || r.beforeImage || reelFallbackImage(r.category);
+  const imgFailed = (url: string) => setBrokenImages((prev) => new Set(prev).add(url));
+  const safe = (url: string, r: ReelStory) => (brokenImages.has(url) ? reelFallbackImage(r.category) : url);
+
+  const shareUrl = current ? `${window.location.origin}/positive-impact?story=${current.id}` : '';
+  const shareText = current
+    ? `Fixed in ${current.daysToResolve} day${current.daysToResolve === 1 ? '' : 's'}: "${current.title}" (${current.locality}) on JanSevak.`
+    : '';
+
+  const Tabs = (
+    <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between p-3 pointer-events-none">
+      <div className="flex items-center gap-1 bg-black/55 backdrop-blur-md rounded-full p-1 border border-white/20 pointer-events-auto">
+        {(['all', 'saved'] as Tab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-3 py-1 rounded-full text-[11px] font-extrabold cursor-pointer transition-colors ${
+              tab === t ? 'bg-white text-[#0f2d59]' : 'text-white/85'
+            }`}
+          >
+            {t === 'all' ? 'Impact Reels' : 'Saved'}
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={() => setPanel('stats')}
+        aria-label="See impact numbers"
+        className="pointer-events-auto flex items-center gap-1.5 text-[11px] font-bold bg-[#0f2d59]/85 text-white px-3 py-1.5 rounded-full backdrop-blur-md border border-white/20 cursor-pointer"
+      >
+        <BarChart3 className="w-3.5 h-3.5 text-[#fbbf24]" />
+        Impact
+      </button>
+    </div>
+  );
+
+  const Empty = (title: string, body: string, action?: React.ReactNode) => (
+    <div className="h-full flex flex-col items-center justify-center text-center px-8 gap-3">
+      <Sparkles className="w-10 h-10 text-[#ea580c]" />
+      <h2 className="text-base font-extrabold">{title}</h2>
+      <p className="text-xs text-white/70 max-w-xs">{body}</p>
+      {action}
+    </div>
+  );
 
   return (
-    <div className="relative w-full h-[calc(100vh-4rem)] max-w-lg mx-auto bg-black text-white overflow-hidden select-none">
-      {/* Scroll-Snap Container (YouTube Shorts & Instagram Reels Style) */}
-      <div
-        ref={containerRef}
-        onScroll={handleScroll}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        className="w-full h-full overflow-y-scroll snap-y snap-mandatory scroll-smooth no-scrollbar"
-        style={{ scrollSnapType: 'y mandatory' }}
-      >
-        {reels.map((reel, index) => {
-          const isCurrent = index === activeIndex;
-          const isLiked = reel.hasLiked;
-          const isSaved = reel.isSaved;
+    <div
+      ref={boxRef}
+      className="relative w-full h-[calc(100vh-4rem)] max-w-lg mx-auto bg-black text-white overflow-hidden select-none"
+      style={{ touchAction: 'pan-x' }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
+      {Tabs}
 
-          return (
-            <div
-              key={reel.id}
-              className="relative w-full h-[calc(100vh-4rem)] snap-start snap-always shrink-0 flex flex-col justify-between overflow-hidden"
-              onDoubleClick={() => handleDoubleTap(reel.id)}
-            >
-              {/* Background Media with Gradient Overlay */}
-              <div className="absolute inset-0 z-0">
-                <img
-                  src={reel.mediaUrl}
-                  alt={reel.title}
-                  className="w-full h-full object-cover"
-                  loading={index <= 2 ? 'eager' : 'lazy'}
-                  onError={(e) => {
-                    const el = e.target as HTMLImageElement;
-                    el.src =
-                      'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&w=1080&q=80';
-                  }}
-                />
+      {status === 'loading' && Empty('Loading stories…', 'Fetching resolved issues from your community.')}
+      {status === 'error' &&
+        Empty(
+          'Could not load stories',
+          'The server did not respond.',
+          <button onClick={load} className="px-4 py-2 rounded-full bg-white text-[#0f2d59] text-xs font-bold cursor-pointer">
+            Try again
+          </button>
+        )}
+      {status === 'ready' && reels.length === 0 &&
+        (tab === 'saved'
+          ? Empty('Nothing saved yet', 'Tap the bookmark on any story to keep it here.')
+          : Empty('No stories yet', 'When officials resolve a reported issue, its before and after story shows up here.'))}
 
-                {/* Vertical Gradient Scrim for perfect text readability */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-transparent to-black/90 pointer-events-none" />
-              </div>
-
-              {/* Heart Pop Animation on Double-Tap */}
-              {heartAnimId === reel.id && (
-                <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none animate-in zoom-in-50 fade-in duration-200">
-                  <div className="p-4 bg-rose-600/80 rounded-full shadow-2xl backdrop-blur-xs scale-125 animate-pulse">
-                    <Heart className="w-16 h-16 fill-white text-white drop-shadow-lg" />
-                  </div>
-                </div>
-              )}
-
-              {/* Top Navigation Bar: Progress & Before/After */}
-              <div className="relative z-10 flex items-center justify-between p-4 pt-3">
-                <div className="flex items-center gap-2 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20 shadow-md">
-                  <Sparkles className="w-4 h-4 text-[#ea580c]" />
-                  <span className="text-xs font-black text-white tracking-wide">
-                    Impact Reels
-                  </span>
-                  <span className="text-[10px] text-blue-200 font-mono font-bold">
-                    {index + 1}/{reels.length}
-                  </span>
-                </div>
-
-                {reel.beforeAfter && (
-                  <button
-                    onClick={() => {
-                      setActiveIndex(index);
-                      setShowImpactDrawer(true);
-                    }}
-                    className="flex items-center gap-1.5 text-[11px] font-bold bg-[#0f2d59]/85 hover:bg-[#0f2d59] active:scale-95 text-white px-3 py-1.5 rounded-full backdrop-blur-md border border-white/20 transition-all shadow-md cursor-pointer"
-                  >
-                    <Award className="w-3.5 h-3.5 text-[#fbbf24]" />
-                    <span>Before & After</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Bottom Main Content & Social Actions */}
-              <div className="relative z-10 p-4 pb-6 flex items-end justify-between gap-3">
-                {/* Left Side: Creator, Title, Caption & Impact Badge */}
-                <div className="flex-1 min-w-0 pr-2 space-y-2">
-                  {/* Creator Info - Clickable to open profile */}
-                  <button
-                    type="button"
-                    onClick={() => navigate('/profile')}
-                    className="flex items-center gap-2.5 text-left group cursor-pointer hover:opacity-90 active:scale-95 transition-all"
-                    title={`View profile of ${reel.creator.name}`}
-                  >
-                    <img
-                      src={reel.creator.avatar}
-                      alt={reel.creator.name}
-                      className="w-9 h-9 rounded-full object-cover border-2 border-white shadow-md shrink-0 group-hover:border-amber-300 transition-colors"
+      {status === 'ready' && reels.length > 0 && (
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: `translateY(calc(${-index * 100}% + ${dragY}px))`,
+            transition: animating ? 'transform 300ms cubic-bezier(0.22, 0.8, 0.3, 1)' : 'none',
+          }}
+        >
+          {reels.map((reel, i) => {
+            if (Math.abs(i - index) > 1) return null; // only the neighbours are mounted
+            const both = reel.beforeImage && reel.afterImage;
+            return (
+              <div
+                key={reel.id}
+                className="absolute inset-x-0 h-full overflow-hidden"
+                style={{ top: `${i * 100}%` }}
+                onDoubleClick={() => doubleTapLike(reel)}
+              >
+                <div className="absolute inset-0">
+                  {both ? (
+                    <BeforeAfterSlider
+                      before={safe(reel.beforeImage!, reel)}
+                      after={safe(reel.afterImage!, reel)}
+                      alt={reel.title}
+                      onFail={() => {
+                        imgFailed(reel.beforeImage!);
+                        imgFailed(reel.afterImage!);
+                      }}
                     />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-white truncate leading-tight group-hover:underline">
-                          {reel.creator.name}
-                        </span>
-                        <span className="text-[9px] bg-white/20 px-1.5 py-0.5 rounded text-white font-semibold">
-                          {reel.creator.role}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-white/80 flex items-center gap-1 mt-0.5 truncate">
-                        <MapPin className="w-3 h-3 text-[#ea580c] shrink-0" />
-                        {reel.locality}
-                      </span>
-                    </div>
-                  </button>
-
-                  {/* Reel Title & Caption */}
-                  <div>
-                    <h2 className="text-sm sm:text-base font-extrabold text-white leading-snug drop-shadow-md">
-                      {reel.title}
-                    </h2>
-                    <p className="text-xs text-white/90 leading-relaxed mt-1 line-clamp-3 drop-shadow-sm font-normal">
-                      {reel.caption}
-                    </p>
-                  </div>
-
-                  {/* Verified Impact Pill */}
-                  <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                    <div className="flex items-center gap-1.5 bg-[#0f2d59]/90 text-white text-[11px] font-bold px-2.5 py-1 rounded-xl backdrop-blur-md border border-white/20">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>{reel.impactStat}</span>
-                    </div>
-
-                    {reel.daysToResolve && (
-                      <span className="text-[10px] text-white/90 bg-black/50 px-2 py-1 rounded-xl backdrop-blur-xs font-medium border border-white/10">
-                        {reel.daysToResolve}
-                      </span>
-                    )}
-                  </div>
+                  ) : (
+                    <img
+                      src={safe(mediaFor(reel), reel)}
+                      alt={reel.title}
+                      className="w-full h-full object-cover"
+                      draggable={false}
+                      onError={() => imgFailed(mediaFor(reel))}
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/90 pointer-events-none" />
                 </div>
 
-                {/* Right Side: Engagement Action Buttons */}
-                <div className="flex flex-col items-center gap-3.5 shrink-0">
-                  {/* Like Button */}
-                  <button
-                    onClick={() => toggleReelLike(reel.id)}
-                    className="flex flex-col items-center gap-1 group cursor-pointer"
-                    aria-label="Like reel"
-                  >
-                    <div
-                      className={`w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-90 ${
-                        isLiked
-                          ? 'bg-rose-600 text-white scale-110 shadow-lg shadow-rose-600/40'
-                          : 'bg-black/50 text-white backdrop-blur-md border border-white/20 hover:bg-black/70'
-                      }`}
-                    >
-                      <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
-                    </div>
-                    <span className="text-[11px] font-bold text-white drop-shadow-md tabular-nums">
-                      {reel.likes}
-                    </span>
-                  </button>
-
-                  {/* Comment Button */}
-                  <button
-                    onClick={() => {
-                      setActiveIndex(index);
-                      setShowCommentsDrawer(true);
-                    }}
-                    className="flex flex-col items-center gap-1 group cursor-pointer"
-                    aria-label="View comments"
-                  >
-                    <div className="w-11 h-11 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/20 flex items-center justify-center hover:bg-black/70 active:scale-95 transition-all">
-                      <MessageCircle className="w-5 h-5" />
-                    </div>
-                    <span className="text-[11px] font-bold text-white drop-shadow-md tabular-nums">
-                      {reel.commentsCount}
-                    </span>
-                  </button>
-
-                  {/* Share Button */}
-                  <button
-                    onClick={() => handleShareReel(reel.title)}
-                    className="flex flex-col items-center gap-1 group cursor-pointer"
-                    aria-label="Share reel"
-                  >
-                    <div className="w-11 h-11 rounded-full bg-black/50 text-white backdrop-blur-md border border-white/20 flex items-center justify-center hover:bg-black/70 active:scale-95 transition-all">
-                      <Share2 className="w-5 h-5" />
-                    </div>
-                    <span className="text-[11px] font-bold text-white drop-shadow-md tabular-nums">
-                      {reel.shares}
-                    </span>
-                  </button>
-
-                  {/* Bookmark Button */}
-                  <button
-                    onClick={() => toggleReelSave(reel.id)}
-                    className="flex flex-col items-center gap-1 group cursor-pointer"
-                    aria-label="Bookmark reel"
-                  >
-                    <div
-                      className={`w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-95 ${
-                        isSaved
-                          ? 'bg-[#0f2d59] text-white border border-[#1d4e8c]'
-                          : 'bg-black/50 text-white backdrop-blur-md border border-white/20 hover:bg-black/70'
-                      }`}
-                    >
-                      <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-current' : ''}`} />
-                    </div>
-                  </button>
-
-                  {/* Before/After Detail Trigger */}
-                  <button
-                    onClick={() => {
-                      setActiveIndex(index);
-                      setShowImpactDrawer(true);
-                    }}
-                    className="w-11 h-11 rounded-full bg-[#ea580c] hover:bg-orange-600 active:scale-95 text-white flex items-center justify-center font-bold shadow-lg shadow-orange-950/40 transition-all cursor-pointer"
-                    title="See Impact Breakdown"
-                  >
-                    <Award className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Swipe Up Tip Indicator (Fades after first scroll) */}
-      {showSwipeHint && (
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-bounce">
-          <div className="bg-black/70 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/20 text-white text-[11px] font-bold flex items-center gap-1.5 shadow-xl">
-            <span>Swipe up for next reel</span>
-            <span>👆</span>
-          </div>
-        </div>
-      )}
-
-      {/* BEFORE & AFTER IMPACT BREAKDOWN DRAWER */}
-      {showImpactDrawer && (
-        <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-end justify-center p-0 animate-in fade-in"
-          onClick={() => setShowImpactDrawer(false)}
-        >
-          <div
-            className="w-full max-w-lg bg-white rounded-t-3xl p-5 text-[#0f172a] space-y-4 max-h-[82vh] overflow-y-auto animate-in slide-in-from-bottom pb-safe"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-10 h-1.5 bg-[#cbd5e1] rounded-full mx-auto" />
-            <div className="flex items-center justify-between pb-2 border-b border-[#cbd5e1]">
-              <div className="flex items-center gap-2">
-                <Award className="w-5 h-5 text-[#0f2d59]" />
-                <h3 className="text-base font-extrabold text-[#0f172a]">
-                  Civic Transformation Story
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowImpactDrawer(false)}
-                className="p-1.5 rounded-full text-[#64748b] hover:text-[#0f172a] cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <h4 className="text-sm font-bold text-[#0f2d59]">
-                {currentReel.title}
-              </h4>
-              <p className="text-xs text-[#64748b] leading-relaxed">
-                {currentReel.caption}
-              </p>
-
-              {currentReel.beforeAfter && (
-                <div className="grid grid-cols-2 gap-2.5 pt-1">
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-2xl">
-                    <span className="text-[10px] font-bold text-red-700 uppercase tracking-wider block">
-                      Before Transformation
-                    </span>
-                    <p className="text-xs font-semibold text-red-900 mt-1">
-                      {currentReel.beforeAfter.beforeLabel}
-                    </p>
+                {heartId === reel.id && (
+                  <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none animate-in zoom-in-50 fade-in duration-200">
+                    <Heart className="w-24 h-24 fill-rose-500 text-rose-500 drop-shadow-2xl" />
                   </div>
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl">
-                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">
-                      After Civic Action
-                    </span>
-                    <p className="text-xs font-semibold text-emerald-900 mt-1">
-                      {currentReel.beforeAfter.afterLabel}
-                    </p>
-                  </div>
-                </div>
-              )}
+                )}
 
-              <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-2xl text-xs text-[#0f2d59] flex items-center justify-between">
-                <span className="font-bold">Verified Community Impact</span>
-                <span className="font-extrabold text-[#0f2d59]">{currentReel.impactStat}</span>
-              </div>
-            </div>
+                {!both && (
+                  <span className="absolute top-16 left-3 z-10 text-[10px] font-bold bg-black/55 text-white/90 px-2.5 py-1 rounded-full">
+                    {reel.afterImage ? 'After photo' : reel.beforeImage ? 'Reported photo' : 'Illustration'}
+                  </span>
+                )}
 
-            <button
-              onClick={() => {
-                toggleReelLike(currentReel.id);
-                setShowImpactDrawer(false);
-              }}
-              className="w-full py-3 bg-[#0f2d59] hover:bg-[#1d4e8c] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
-            >
-              Celebrate This Win (+5 Pts)
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* REEL COMMENTS DRAWER */}
-      {showCommentsDrawer && (
-        <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-end justify-center p-0 animate-in fade-in"
-          onClick={() => setShowCommentsDrawer(false)}
-        >
-          <div
-            className="w-full max-w-lg bg-white rounded-t-3xl p-5 text-[#0f172a] flex flex-col max-h-[75vh] animate-in slide-in-from-bottom pb-safe"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-10 h-1.5 bg-[#cbd5e1] rounded-full mx-auto mb-2" />
-            <div className="flex items-center justify-between pb-2 border-b border-[#cbd5e1]">
-              <h3 className="text-sm font-bold text-[#0f172a]">
-                Story Reactions ({currentReel.commentsCount})
-              </h3>
-              <button
-                onClick={() => setShowCommentsDrawer(false)}
-                className="p-1 rounded-full text-[#64748b] hover:text-[#0f172a] cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto py-3 space-y-2.5">
-              {currentReel.comments.map((c) => (
-                <div key={c.id} className="p-2.5 bg-[#f8fafc] rounded-xl text-xs">
-                  <div className="flex items-center justify-between mb-0.5">
+                <div className="absolute inset-x-0 bottom-0 z-10 p-4 pb-5 flex items-end justify-between gap-3 pointer-events-none">
+                  <div className="flex-1 min-w-0 space-y-2 pointer-events-auto">
                     <button
                       type="button"
-                      onClick={() => {
-                        setShowCommentsDrawer(false);
-                        navigate('/profile');
-                      }}
-                      className="font-bold text-[#0f172a] hover:underline cursor-pointer text-left"
-                      title={`View profile for ${c.author}`}
+                      onClick={() => openProfile(reel.creator.id, reel.creator.name)}
+                      className="flex items-center gap-2.5 text-left cursor-pointer"
                     >
-                      {c.author}
+                      <Avatar src={reel.creator.avatar} name={reel.creator.name} size={36} />
+                      <div className="min-w-0">
+                        <span className="block text-xs font-bold truncate">{reel.creator.name}</span>
+                        <span className="text-[10px] text-white/80 flex items-center gap-1 truncate">
+                          <MapPin className="w-3 h-3 text-[#ea580c] shrink-0" />
+                          {reel.locality}
+                        </span>
+                      </div>
                     </button>
-                    <span className="text-[10px] text-[#64748b]">{c.time}</span>
+                    <div>
+                      <h2 className="text-sm sm:text-base font-extrabold leading-snug drop-shadow">{reel.title}</h2>
+                      <p className="text-xs text-white/90 mt-1 line-clamp-2 drop-shadow-sm">
+                        {reel.resolutionNote || reel.caption}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="flex items-center gap-1.5 bg-[#0f2d59]/90 text-[11px] font-bold px-2.5 py-1 rounded-xl border border-white/20">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Resolved in {reel.daysToResolve} day{reel.daysToResolve === 1 ? '' : 's'}
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] bg-black/50 px-2 py-1 rounded-xl border border-white/10">
+                        <Users className="w-3 h-3" />
+                        {reel.supporters} citizen{reel.supporters === 1 ? '' : 's'} backed it
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] bg-black/50 px-2 py-1 rounded-xl border border-white/10">
+                        <Clock className="w-3 h-3" />
+                        {new Date(reel.resolvedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-slate-800">{c.text}</p>
-                </div>
-              ))}
-            </div>
 
-            <form onSubmit={handlePostReelComment} className="flex gap-2 pt-2 border-t border-[#cbd5e1]">
-              <input
-                type="text"
-                value={reelCommentInput}
-                onChange={(e) => setReelCommentInput(e.target.value)}
-                placeholder="Share your appreciation..."
-                className="flex-1 text-xs bg-[#f8fafc] border border-[#cbd5e1] rounded-xl px-3 py-2 text-[#0f172a] focus:outline-none focus:border-[#0f2d59]"
-              />
-              <button
-                type="submit"
-                disabled={!reelCommentInput.trim()}
-                className="p-2.5 bg-[#0f2d59] text-white rounded-xl disabled:opacity-40 cursor-pointer"
-              >
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </form>
-          </div>
+                  <div className="flex flex-col items-center gap-3.5 shrink-0 pointer-events-auto mb-[88px]">
+                    <ActionButton label="Like" active={reel.hasLiked} activeClass="bg-rose-600" count={reel.likes} onClick={() => toggleLike(reel)}>
+                      <Heart className={`w-5 h-5 ${reel.hasLiked ? 'fill-current' : ''}`} />
+                    </ActionButton>
+                    <ActionButton label="Comments" count={reel.commentsCount} onClick={() => setPanel('comments')}>
+                      <MessageCircle className="w-5 h-5" />
+                    </ActionButton>
+                    <ActionButton label="Share" count={reel.shares} onClick={() => setPanel('share')}>
+                      <Share2 className="w-5 h-5" />
+                    </ActionButton>
+                    <ActionButton label="Save" active={reel.isSaved} activeClass="bg-[#0f2d59]" onClick={() => toggleSave(reel)}>
+                      <Bookmark className={`w-5 h-5 ${reel.isSaved ? 'fill-current' : ''}`} />
+                    </ActionButton>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
+
+      {status === 'ready' && reels.length > 1 && (
+        <div className="absolute right-1.5 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-1 pointer-events-none">
+          {reels.slice(0, 12).map((r, i) => (
+            <span key={r.id} className={`w-1 rounded-full transition-all ${i === index ? 'h-5 bg-white' : 'h-1.5 bg-white/40'}`} />
+          ))}
+        </div>
+      )}
+
+      {panel === 'comments' && current && (
+        <ReelCommentsSheet
+          issueId={current.id}
+          title={current.title}
+          onCount={(n) => patch(current.id, { commentsCount: n })}
+          onClose={() => setPanel(null)}
+          onOpenProfile={(id, name) => {
+            setPanel(null);
+            openProfile(id, name);
+          }}
+        />
+      )}
+      {panel === 'share' && current && (
+        <ReelShareSheet title={current.title} url={shareUrl} text={shareText} onShared={onShared} onClose={() => setPanel(null)} />
+      )}
+      {panel === 'stats' && <ImpactStatsSheet onClose={() => setPanel(null)} />}
     </div>
   );
 };
+
+const ActionButton: React.FC<{
+  label: string;
+  count?: number;
+  active?: boolean;
+  activeClass?: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}> = ({ label, count, active, activeClass = '', onClick, children }) => (
+  <button onClick={onClick} aria-label={label} className="flex flex-col items-center gap-1 cursor-pointer">
+    <span
+      className={`w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-90 text-white ${
+        active ? `${activeClass} shadow-lg` : 'bg-black/50 backdrop-blur-md border border-white/20'
+      }`}
+    >
+      {children}
+    </span>
+    {count !== undefined && <span className="text-[11px] font-bold tabular-nums drop-shadow">{count}</span>}
+  </button>
+);

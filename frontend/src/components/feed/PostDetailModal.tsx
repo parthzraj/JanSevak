@@ -34,6 +34,7 @@ import { SupporterAvatar, SupportersModal } from './SupportersModal';
 import { Avatar } from '../common/Avatar';
 import { useProfileLink } from '../../lib/useProfileLink';
 import { IssueDrives } from '../volunteer/IssueDrives';
+import { ResolveModal } from './ResolveModal';
 
 export const PostDetailModal: React.FC = () => {
   const navigate = useNavigate();
@@ -52,6 +53,7 @@ export const PostDetailModal: React.FC = () => {
   } = useApp();
 
   const [commentInput, setCommentInput] = useState('');
+  const [showResolve, setShowResolve] = useState(false);
 
   const [showEvidenceUpload, setShowEvidenceUpload] = useState(false);
   const [evidenceFiles, setEvidenceFiles] = useState<{ file: File; preview: string }[]>([]);
@@ -1012,9 +1014,7 @@ export const PostDetailModal: React.FC = () => {
             </div>
           ) : user.role === 'official' || user.role === 'admin' ? (
             <button
-              onClick={() => {
-                resolveReport(post.id);
-              }}
+              onClick={() => setShowResolve(true)}
               className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
               title="Verify and Mark Problem Resolved"
             >
@@ -1033,6 +1033,14 @@ export const PostDetailModal: React.FC = () => {
             <span>{isOwnReport ? 'Add Photo' : 'Add Photo (+10 pts)'}</span>
           </button>
         </footer>
+
+        {showResolve && (
+          <ResolveModal
+            title={post.title}
+            onConfirm={(opts) => resolveReport(post.id, opts)}
+            onClose={() => setShowResolve(false)}
+          />
+        )}
 
         {lightboxIndex !== null && hasPhotos && (
           <ImageLightbox
