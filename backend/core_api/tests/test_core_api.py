@@ -446,3 +446,180 @@ def test_oversized_dimensions_are_scaled_down(client, make_user):
     assert r.status_code == 201
     img = Image.open(io.BytesIO(client.get(r.json()["url"]).content))
     assert max(img.size) <= 2560
+
+
+# ---------------------------------------------------------------- profiles, avatars, analytics
+def test_public_profile_hides_private_data(client, make_user):
+    a_h, a = make_user(email="a@example.com", name="Anna A")
+    b_h, _ = make_user(email="b@example.com", name="Bob B")
+    r = client.get(f"/api/users/{a['id']}", headers=b_h)
+    assert r.status_code == 200 and r.json()["name"] == "Anna A"
+    assert "email" not in r.json() and "password_hash" not in r.json()
+    assert client.get(f"/api/users/{a['id']}").status_code == 401
+    assert client.get("/api/users/9999", headers=b_h).status_code == 404
+
+
+def test_avatar_choice_is_validated(client, make_user):
+    h, _ = make_user()
+    ok = client.patch("/api/auth/me", json={"avatar_url": "preset:woman-2"}, headers=h)
+    assert ok.status_code == 200 and ok.json()["avatar_url"] == "preset:woman-2"
+    for bad in ("preset:nope", "http://evil.example/x.png", "/uploads/../secret", "javascript:alert(1)"):
+        assert client.patch("/api/auth/me", json={"avatar_url": bad}, headers=h).status_code == 422
+    reset = client.patch("/api/auth/me", json={"avatar_url": ""}, headers=h)
+    assert reset.json()["avatar_url"] is None
+
+
+def test_analytics_summary_is_computed_from_real_issues(client, make_user, official_headers):
+    owner_h, _ = make_user(email="o@example.com")
+    other_h, _ = make_user(email="x@example.com")
+    off_h = official_headers
+    empty = client.get("/api/analytics/summary", headers=owner_h).json()
+    assert empty["mine"]["total"] == 0 and empty["mine"]["avg_resolution_hours"] is None
+
+    i1 = client.post("/api/issues", json=ISSUE, headers=owner_h).json()["issue"]["id"]
+    client.post("/api/issues", json={**ISSUE, "category": "Water"}, headers=owner_h)
+    client.post("/api/issues", json=ISSUE, headers=other_h)
+    for st in ("Under Review", "In Progress", "Resolved"):
+        assert client.patch(f"/api/issues/{i1}/status", json={"status": st}, headers=off_h).status_code == 200
+
+    s = client.get("/api/analytics/summary", headers=owner_h).json()
+    assert s["mine"]["total"] == 2 and s["mine"]["resolved"] == 1 and s["mine"]["resolution_rate"] == 50
+    assert s["community"]["total"] == 3 and s["community"]["resolved"] == 1
+    assert s["mine"]["avg_resolution_hours"] is not None
+    assert {c["category"] for c in s["mine"]["by_category"]} == {ISSUE["category"], "Water"}
+    assert client.get("/api/analytics/summary").status_code == 401
+
+
+# ---------------------------------------------------------------- report quality & deleting reports
+GOOD = {
+    "title": "Deep pothole near metro pillar",
+    "description": "A deep pothole has formed in the left lane and two-wheelers swerve into traffic to avoid it.",
+    "category": "Roads",
+    "priority": "High",
+    "address": "12th Main Road, Indiranagar",
+    "latitude": 12.9784,
+    "longitude": 77.6408,
+}
+
+
+def _upload(client, headers, seed=None):
+    r = client.post("/api/uploads", files={"file": ("a.png", real_image("PNG", seed=seed), "image/png")}, headers=headers)
+    assert r.status_code == 201
+    return r.json()["url"]
+
+
+def _strict(monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "STRICT_REPORT_RULES", True)
+
+
+def test_report_needs_photo_description_and_location(client, make_user, monkeypatch):
+    _strict(monkeypatch)
+    h, _ = make_user()
+    url = _upload(client, h)
+
+    r = client.post("/api/issues", json={**GOOD, "image_urls": []}, headers=h)
+    assert r.status_code == 422 and "photo" in r.json()["detail"]
+    r = client.post("/api/issues", json={**GOOD, "description": "bad road", "image_urls": [url]}, headers=h)
+    assert r.status_code == 422 and "describe" in r.json()["detail"].lower()
+    r = client.post("/api/issues", json={**GOOD, "description": "a" * 60, "image_urls": [url]}, headers=h)
+    assert r.status_code == 422
+    r = client.post("/api/issues", json={**GOOD, "title": "Road", "image_urls": [url]}, headers=h)
+    assert r.status_code == 422 and "title" in r.json()["detail"].lower()
+    no_loc = {k: v for k, v in GOOD.items() if k not in ("address", "latitude", "longitude")}
+    r = client.post("/api/issues", json={**no_loc, "image_urls": [url]}, headers=h)
+    assert r.status_code == 422 and "location" in r.json()["detail"].lower()
+    r = client.post("/api/issues", json={**GOOD, "image_urls": ["/uploads/does-not-exist.jpg"]}, headers=h)
+    assert r.status_code == 422 and "photo" in r.json()["detail"].lower()
+    r = client.post("/api/issues", json={**GOOD, "image_urls": ["https://example.com/x.jpg"]}, headers=h)
+    assert r.status_code == 422
+
+    ok = client.post("/api/issues", json={**GOOD, "image_urls": [url]}, headers=h)
+    assert ok.status_code == 201 and ok.json()["points_awarded"] == 35  # 20 + 10 photo + 5 location
+
+
+def test_duplicate_reports_are_rejected(client, make_user, monkeypatch):
+    _strict(monkeypatch)
+    a_h, _ = make_user(email="a@example.com")
+    b_h, _ = make_user(email="b@example.com")
+    first = client.post("/api/issues", json={**GOOD, "image_urls": [_upload(client, a_h)]}, headers=a_h)
+    assert first.status_code == 201
+    first_id = first.json()["issue"]["id"]
+
+    # same person, same problem again -> told to add photos to the first report
+    again = client.post("/api/issues", json={**GOOD, "image_urls": [_upload(client, a_h)]}, headers=a_h)
+    assert again.status_code == 409 and again.json()["detail"]["code"] == "duplicate_own_report"
+
+    # somebody else, ~50 m away, reworded -> pointed at the existing report
+    near = {**GOOD, "title": "Big pothole by the metro pillar", "latitude": 12.9787, "longitude": 77.6410}
+    dup = client.post("/api/issues", json={**near, "image_urls": [_upload(client, b_h)]}, headers=b_h)
+    assert dup.status_code == 409
+    assert dup.json()["detail"]["code"] == "duplicate_report" and dup.json()["detail"]["issue_id"] == first_id
+
+    # far away (a different spot) or another category is fine
+    far = {**GOOD, "latitude": 12.9352, "longitude": 77.6245, "address": "Koramangala 4th Block"}
+    assert client.post("/api/issues", json={**far, "image_urls": [_upload(client, b_h)]}, headers=b_h).status_code == 201
+    other = {**GOOD, "category": "Water", "title": "Water pipeline burst on the lane", "description": "The water pipeline burst and the whole lane is flooded since this morning."}
+    assert client.post("/api/issues", json={**other, "image_urls": [_upload(client, b_h)]}, headers=b_h).status_code == 201
+
+
+def test_daily_report_limit(client, make_user, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "MAX_REPORTS_PER_DAY", 2)
+    h, _ = make_user()
+    for i in range(2):
+        assert client.post("/api/issues", json={**ISSUE, "title": f"Report number {i} here"}, headers=h).status_code == 201
+    assert client.post("/api/issues", json=ISSUE, headers=h).status_code == 429
+
+
+def test_owner_can_delete_report_and_points_are_taken_back(client, make_user, official_headers):
+    owner_h, owner = make_user(email="o@example.com")
+    voter_h, _ = make_user(email="v@example.com")
+    other_h, _ = make_user(email="x@example.com")
+    img = _upload(client, owner_h)
+    created = client.post("/api/issues", json={**ISSUE, "image_urls": [img], "address": "MG Road"}, headers=owner_h).json()
+    iid = created["issue"]["id"]
+    assert created["user_points"] == 35
+    client.post(f"/api/issues/{iid}/upvote", headers=voter_h)
+    client.post(f"/api/issues/{iid}/comments", json={"text": "me too"}, headers=voter_h)
+
+    assert client.delete(f"/api/issues/{iid}", headers=other_h).status_code == 403
+    assert client.delete(f"/api/issues/{iid}").status_code == 401
+
+    r = client.delete(f"/api/issues/{iid}", headers=owner_h)
+    assert r.status_code == 200 and r.json()["points_reverted"] == 35 and r.json()["user_points"] == 0
+    me = client.get("/api/auth/me", headers=owner_h).json()
+    assert me["points"] == 0 and me["reports_count"] == 0
+    assert client.get("/api/auth/me", headers=voter_h).json()["supported_count"] == 0
+    assert client.get(f"/api/issues/{iid}").status_code == 404
+    assert client.get(img).status_code == 404  # the photo file is gone too
+    assert client.delete(f"/api/issues/{iid}", headers=owner_h).status_code == 404
+
+    # delete + re-report can't be used to farm points: reversing does not free up the daily cap
+    again = client.post("/api/issues", json={**ISSUE, "title": "Pothole on Main Road again", "image_urls": [_upload(client, owner_h)]}, headers=owner_h).json()
+    assert again["points_awarded"] == 25 and again["user_points"] == 25  # only 60 - 35 cap room left
+
+
+def test_report_cannot_be_deleted_once_officials_started(client, make_user, official_headers):
+    owner_h, _ = make_user(email="o@example.com")
+    iid = client.post("/api/issues", json=ISSUE, headers=owner_h).json()["issue"]["id"]
+    client.patch(f"/api/issues/{iid}/status", json={"status": "Under Review"}, headers=official_headers)
+    r = client.delete(f"/api/issues/{iid}", headers=owner_h)
+    assert r.status_code == 409 and "Under Review" in r.json()["detail"]
+    assert client.get(f"/api/issues/{iid}").status_code == 200
+
+
+def test_deleted_report_disappears_everywhere(client, make_user):
+    h, _ = make_user()
+    keep = client.post("/api/issues", json={**ISSUE, "title": "Report that stays here"}, headers=h).json()["issue"]["id"]
+    gone = client.post("/api/issues", json={**ISSUE, "title": "Report that goes away"}, headers=h).json()["issue"]["id"]
+    assert client.delete(f"/api/issues/{gone}", headers=h).status_code == 200
+
+    ids = [i["id"] for i in client.get("/api/issues").json()["items"]]
+    assert ids == [keep]
+    assert client.get("/api/issues", params={"q": "deleted"}).json()["total"] == 0
+    assert client.get(f"/api/issues/{gone}/supporters", headers=h).status_code == 404
+    assert client.post(f"/api/issues/{gone}/comments", json={"text": "hi"}, headers=h).status_code == 404
+    assert client.get("/api/analytics/summary", headers=h).json()["mine"]["total"] == 1

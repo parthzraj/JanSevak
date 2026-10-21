@@ -3,12 +3,12 @@ import math
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, utcnow
 from app.core.security import get_current_user, get_optional_user, require_official
-from app.models.issue import CivicIssue, IssueComment, IssueTimelineEvent, IssueVote
+from app.models.issue import CivicIssue, IssueComment, IssueEvidence, IssueTimelineEvent, IssueVote
 from app.models.user import User
 from app.schemas.issue import (
     STATUS_ORDER,
@@ -26,7 +26,9 @@ from app.schemas.issue import (
     to_ui_priority,
 )
 from app.services.notifications import notify
-from app.services.points_engine import award_points
+from app.routers.uploads import delete_uploaded
+from app.services.points_engine import award_points, revert_award
+from app.services.report_quality import check_daily_limit, check_not_duplicate, check_report_content
 
 router = APIRouter(prefix="/issues", tags=["Issues"])
 
@@ -103,6 +105,8 @@ def issue_to_detail(db: Session, issue: CivicIssue, viewer: User | None) -> Issu
 
 def get_issue_or_404(db: Session, issue_id: int) -> CivicIssue:
     issue = db.get(CivicIssue, issue_id)
+    if issue is not None and issue.deleted_at is not None:
+        issue = None
     if issue is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
     return issue
@@ -131,7 +135,7 @@ def list_issues(
         if priority not in _PRIORITIES:
             raise HTTPException(status_code=400, detail=f"Invalid priority. Use one of: {sorted(_PRIORITIES)}")
 
-    filters = []
+    filters = [CivicIssue.deleted_at.is_(None)]
     if category:
         filters.append(CivicIssue.category == category)
     if status_:
@@ -186,6 +190,9 @@ def list_issues(
 
 @router.post("", response_model=IssueCreatedResponse, status_code=status.HTTP_201_CREATED)
 def create_issue(body: IssueCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    check_daily_limit(db, user)
+    check_report_content(body)
+    check_not_duplicate(db, user, body)
     issue = CivicIssue(
         title=body.title,
         description=body.description,
@@ -222,6 +229,51 @@ def create_issue(body: IssueCreate, user: User = Depends(get_current_user), db: 
         user_points=user.points,
         user_tier=user.tier,
     )
+
+
+@router.delete("/{issue_id}")
+def delete_issue(issue_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Withdraw a report. Reporters can delete their own report until an official starts on it
+    (status still "Reported"); admins can delete any report. The points the report earned are taken back."""
+    issue = get_issue_or_404(db, issue_id)
+    is_admin = user.role == "admin"
+    if issue.reporter_id != user.id and not is_admin:
+        raise HTTPException(status_code=403, detail="You can only delete your own reports")
+    if not is_admin and issue.status != "Reported":
+        raise HTTPException(
+            status_code=409,
+            detail=f"This report is '{issue.status}' and can no longer be deleted. Officials have already started working on it.",
+        )
+
+    reporter = issue.reporter
+    reverted = 0
+    for action in ("report", "report_photo", "report_location", "resolve"):
+        reverted += revert_award(db, reporter, action, issue.id, description=f"Report deleted: {issue.title[:60]}")
+    reporter.reports_count = max(0, (reporter.reports_count or 0) - 1)
+    if issue.status == "Resolved":
+        reporter.resolved_count = max(0, (reporter.resolved_count or 0) - 1)
+
+    voter_ids = list(db.scalars(select(IssueVote.user_id).where(IssueVote.issue_id == issue.id)))
+    if voter_ids:
+        db.execute(
+            update(User)
+            .where(User.id.in_(voter_ids))
+            .values(supported_count=case((User.supported_count > 0, User.supported_count - 1), else_=0))
+        )
+    files = list(issue.images) + [e.image_url for e in issue.evidence]
+    for model in (IssueVote, IssueComment, IssueTimelineEvent, IssueEvidence):
+        db.execute(delete(model).where(model.issue_id == issue.id))
+    # keep an empty, hidden tombstone: the id must never be handed out again
+    issue.deleted_at = utcnow()
+    issue.title, issue.description, issue.image_urls, issue.address = "[deleted]", "[deleted]", "[]", None
+    issue.latitude = issue.longitude = None
+    issue.upvotes = 0
+    db.commit()
+    for url in files:
+        delete_uploaded(url)
+
+    db.refresh(user)
+    return {"deleted_id": issue_id, "points_reverted": reverted, "user_points": user.points, "user_tier": user.tier}
 
 
 @router.get("/{issue_id}", response_model=IssueDetailResponse)

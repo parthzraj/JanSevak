@@ -9,7 +9,9 @@ import {
   type BackendUser,
 } from './api';
 
-const DEFAULT_AVATAR = '/profile_3d_avatar.jpg';
+/** "preset:man-1" stays as is (drawn by <Avatar>), uploads become full URLs, nothing -> '' (coloured initials). */
+export const avatarFrom = (url: string | null | undefined): string =>
+  !url ? '' : url.startsWith('preset:') ? url : assetUrl(url);
 
 export const CATEGORY_VISUALS: Record<CivicCategory, { url: string; grad: string }> = {
   Roads: {
@@ -77,7 +79,7 @@ export function toUserProfile(u: BackendUser, prev?: UserProfile): UserProfile {
     id: String(u.id),
     name: u.name,
     email: u.email,
-    avatar: u.avatar_url ? assetUrl(u.avatar_url) : DEFAULT_AVATAR,
+    avatar: avatarFrom(u.avatar_url),
     neighborhood,
     wardNumber,
     points: u.points,
@@ -99,7 +101,8 @@ export function toComment(c: BackendComment) {
   return {
     id: String(c.id),
     author: c.author,
-    avatar: c.avatar_url ? assetUrl(c.avatar_url) : DEFAULT_AVATAR,
+    avatar: avatarFrom(c.avatar_url),
+    userId: String(c.user_id),
     text: c.text,
     time: timeAgo(c.created_at),
     isOfficial: c.is_official,
@@ -115,7 +118,7 @@ export function toCivicPost(i: BackendIssue): CivicPost {
     reporter: {
       id: String(i.reporter.id),
       name: i.reporter.name,
-      avatar: i.reporter.avatar_url ? assetUrl(i.reporter.avatar_url) : DEFAULT_AVATAR,
+      avatar: avatarFrom(i.reporter.avatar_url),
       isVerified: true,
       wardOrArea: i.address || i.reporter.ward || 'Bengaluru',
     },
@@ -164,7 +167,7 @@ export function toSupporter(s: BackendSupporter) {
   return {
     id: String(s.user_id),
     name: s.name,
-    avatar: s.avatar_url ? assetUrl(s.avatar_url) : '', // '' -> the UI shows the person's initial
+    avatar: avatarFrom(s.avatar_url), // '' -> the UI shows the person's initials
     ward: s.ward ?? undefined,
     time: timeAgo(s.supported_at),
   };

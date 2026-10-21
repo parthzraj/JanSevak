@@ -10,6 +10,7 @@ os.environ["UPLOAD_DIR"] = f"{_tmp}/uploads"
 os.environ["AI_SERVICE_URL"] = "http://ai.test"
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["DAILY_POINTS_CAP"] = "60"
+os.environ["STRICT_REPORT_RULES"] = "false"  # old tests post short demo reports; the quality rules have their own tests
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest  # noqa: E402

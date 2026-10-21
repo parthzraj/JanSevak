@@ -33,6 +33,7 @@ import {
   addCommentRequest,
   claimReward,
   createIssueRequest,
+  deleteIssueRequest,
   fetchIssue,
   fetchIssues,
   fetchMe,
@@ -52,7 +53,7 @@ import {
   upvoteIssue,
   type BackendTokenResponse,
 } from '../lib/api';
-import { nextLevelPoints, toCivicPost, toComment, toNotification, toSupporter, toUserProfile } from '../lib/mappers';
+import { avatarFrom, nextLevelPoints, toCivicPost, toComment, toNotification, toSupporter, toUserProfile } from '../lib/mappers';
 
 interface AppContextType {
   user: UserProfile;
@@ -110,6 +111,15 @@ interface AppContextType {
   selectedPostForShare: CivicPost | null;
   setSelectedPostForShare: (post: CivicPost | null) => void;
   updateUserProfile: (updates: Partial<UserProfile>) => void;
+  /** Pick a built-in avatar ('preset:woman-1'), upload a photo (File), or pass '' to go back to the initials avatar. */
+  changeAvatar: (choice: string | File) => Promise<boolean>;
+  /** Delete one of your own reports (only while it is still "Reported"). Resolves true on success. */
+  deleteReport: (postId: string) => Promise<boolean>;
+  /** Set when the server says a new report repeats an existing one, so the form can offer to open the original. */
+  duplicateReport: { issueId: string; title: string; message: string } | null;
+  clearDuplicateReport: () => void;
+  /** Opens a report in the detail view even if it is not in the loaded feed. */
+  openIssueById: (id: string) => Promise<void>;
   isMenuPopupOpen: boolean;
   setIsMenuPopupOpen: (open: boolean) => void;
   toggleMenuPopup: () => void;
@@ -167,7 +177,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const parsed = JSON.parse(saved);
         if (['Bronze', 'Silver', 'Gold', 'Platinum', 'Legend'].includes(parsed.level)) {
-          parsed.avatar = '/profile_3d_avatar.jpg';
+          if (!parsed.avatar || parsed.avatar === '/profile_3d_avatar.jpg') parsed.avatar = '';
           return parsed;
         }
       } catch (e) {
@@ -450,6 +460,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateMe({ name: next.name, ward }).catch(() => undefined);
   };
 
+  const changeAvatar = async (choice: string | File): Promise<boolean> => {
+    try {
+      let value = choice as string;
+      if (choice instanceof File) {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(new Error('Could not read that file'));
+          reader.readAsDataURL(choice);
+        });
+        value = await uploadImageDataUrl(dataUrl); // "/uploads/xxxx.jpg"
+      }
+      const me = await updateMe({ avatar_url: value });
+      const avatar = avatarFrom(me.avatar_url);
+      setUser((prev) => ({ ...prev, avatar }));
+      setPosts((prev) =>
+        prev.map((p) => (p.reporter.id === String(me.id) ? { ...p, reporter: { ...p.reporter, avatar } } : p))
+      );
+      addToast('Profile Photo Updated', 'Everyone will now see your new picture.', 'success');
+      return true;
+    } catch (e) {
+      addToast('Could not change photo', errText(e), 'info');
+      return false;
+    }
+  };
+
+  const [duplicateReport, setDuplicateReport] = useState<{ issueId: string; title: string; message: string } | null>(null);
+  const clearDuplicateReport = () => setDuplicateReport(null);
+
+  const openIssueById = async (id: string): Promise<void> => {
+    const loaded = posts.find((p) => p.id === id);
+    if (loaded) {
+      setSelectedPostForDetail(loaded);
+      return;
+    }
+    try {
+      const detail = await fetchIssue(id);
+      setSelectedPostForDetail(toCivicPost(detail));
+    } catch (e) {
+      addToast('Could not open report', errText(e), 'info');
+    }
+  };
+
+  const deleteReport = async (postId: string): Promise<boolean> => {
+    if (!/^\d+$/.test(postId)) {
+      addToast('Cannot delete here', 'Demo reports are not stored on the server.', 'info');
+      return false;
+    }
+    try {
+      const res = await deleteIssueRequest(postId);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      setSelectedPostForDetail(null);
+      setUser((prev) => ({
+        ...prev,
+        points: res.user_points,
+        level: res.user_tier,
+        nextLevelPoints: nextLevelPoints(res.user_points),
+        stats: { ...prev.stats, reportsCount: Math.max(0, prev.stats.reportsCount - 1) },
+      }));
+      addToast(
+        'Report Deleted',
+        res.points_reverted > 0 ? `${res.points_reverted} points earned from this report were taken back.` : 'Your report was removed.',
+        'info'
+      );
+      return true;
+    } catch (e) {
+      addToast('Could not delete report', errText(e), 'info');
+      return false;
+    }
+  };
+
   const createReport = async (report: {
     title: string;
     category: CivicCategory;
@@ -461,6 +542,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     latitude?: number;
     longitude?: number;
   }): Promise<string | null> => {
+    setDuplicateReport(null);
     try {
       // Photos picked in the app are data URLs: upload them first, send the returned URLs with the report
       const imageUrls: string[] = [];
@@ -498,7 +580,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return post.id;
     } catch (e) {
-      addToast('Could not submit report', errText(e), 'info');
+      if (e instanceof ApiError && e.data && typeof e.data.issue_id === 'number') {
+        setDuplicateReport({ issueId: String(e.data.issue_id), title: String(e.data.title ?? 'existing report'), message: e.message });
+      } else {
+        addToast('Could not submit report', errText(e), 'info');
+      }
       return null;
     }
   };
@@ -880,6 +966,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedPostForShare,
         setSelectedPostForShare,
         updateUserProfile,
+        changeAvatar,
+        deleteReport,
+        duplicateReport,
+        clearDuplicateReport,
+        openIssueById,
         isMenuPopupOpen,
         setIsMenuPopupOpen,
         toggleMenuPopup,

@@ -31,9 +31,12 @@ import { ImageLightbox } from './ImageLightbox';
 import { MapViewModal } from './MapViewModal';
 import { DepartmentModal, getDepartmentInfo } from './DepartmentModal';
 import { SupporterAvatar, SupportersModal } from './SupportersModal';
+import { Avatar } from '../common/Avatar';
+import { useProfileLink } from '../../lib/useProfileLink';
 
 export const PostDetailModal: React.FC = () => {
   const navigate = useNavigate();
+  const openProfile = useProfileLink();
   const {
     selectedPostForDetail,
     setSelectedPostForDetail,
@@ -43,6 +46,7 @@ export const PostDetailModal: React.FC = () => {
     addComment,
     addEvidence,
     resolveReport,
+    deleteReport,
     user,
   } = useApp();
 
@@ -53,6 +57,8 @@ export const PostDetailModal: React.FC = () => {
   const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
   const [showSupporters, setShowSupporters] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [showMap, setShowMap] = useState(false);
@@ -67,6 +73,8 @@ export const PostDetailModal: React.FC = () => {
     setShowDepartment(false);
     setShowSupporters(false);
     setShowMenu(false);
+    setConfirmDelete(false);
+    setIsDeleting(false);
     setShowEvidenceUpload(false);
     setEvidenceFiles((prev) => {
       prev.forEach((f) => URL.revokeObjectURL(f.preview));
@@ -349,6 +357,25 @@ export const PostDetailModal: React.FC = () => {
                 >
                   Contact Ward Desk
                 </button>
+                {(isOwnReport || user.role === 'admin') && (
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      if (user.role !== 'admin' && post.status !== 'Reported') {
+                        addToast(
+                          'Cannot delete this report',
+                          `It is "${post.status}" - officials have already started working on it.`,
+                          'info'
+                        );
+                      } else {
+                        setConfirmDelete(true);
+                      }
+                    }}
+                    className="w-full text-left px-3.5 py-2 hover:bg-red-50 text-red-700 font-bold border-t border-slate-100"
+                  >
+                    Delete Report
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -782,7 +809,7 @@ export const PostDetailModal: React.FC = () => {
                               type="button"
                               onClick={() => {
                                 setSelectedPostForDetail(null);
-                                navigate('/profile');
+                                openProfile(post.reporter.id, post.reporter.name);
                               }}
                               className="font-bold text-[#0f2d59] hover:underline cursor-pointer"
                               title={`View profile for ${post.reporter.name}`}
@@ -901,19 +928,12 @@ export const PostDetailModal: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setSelectedPostForDetail(null);
-                          navigate('/profile');
+                          openProfile(comment.userId, comment.author);
                         }}
                         className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity"
                         title={`View profile for ${comment.author}`}
                       >
-                        <img
-                          src={comment.avatar}
-                          alt={comment.author}
-                          className="w-5 h-5 rounded-full object-cover shrink-0"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                          }}
-                        />
+                        <Avatar src={comment.avatar} name={comment.author} size={20} />
                         <span className="font-bold text-slate-800 text-[11px] hover:underline">{comment.author}</span>
                         {comment.isOfficial && (
                           <span className="text-[9px] font-black text-[#0f2d59] bg-blue-100 px-1.5 py-0.2 rounded-md">
@@ -1015,7 +1035,56 @@ export const PostDetailModal: React.FC = () => {
             supporters={supporters}
             total={supportersTotal}
             onClose={() => setShowSupporters(false)}
+            onOpenProfile={(id, name) => {
+              setShowSupporters(false);
+              setSelectedPostForDetail(null);
+              openProfile(id, name);
+            }}
           />
+        )}
+
+        {confirmDelete && (
+          <div
+            className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4"
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Delete report"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isDeleting) setConfirmDelete(false);
+            }}
+          >
+            <div className="w-full max-w-sm bg-white rounded-3xl p-5 shadow-2xl space-y-3" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-sm font-extrabold text-[#0f172a]">Delete this report?</h3>
+              <p className="text-xs text-[#64748b] leading-relaxed">
+                &ldquo;{post.title}&rdquo; will be removed for everyone, together with its photos, comments and upvotes.
+                The points you earned for it will be taken back. This cannot be undone.
+              </p>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setConfirmDelete(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-[#cbd5e1] text-xs font-semibold text-[#64748b] cursor-pointer"
+                >
+                  Keep it
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={async () => {
+                    setIsDeleting(true);
+                    await deleteReport(post.id);
+                    setIsDeleting(false);
+                    setConfirmDelete(false);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
+                >
+                  {isDeleting ? 'Deleting…' : 'Yes, delete'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {showMap && (

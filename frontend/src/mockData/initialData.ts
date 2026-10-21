@@ -69,7 +69,7 @@ export const INITIAL_USER: UserProfile = {
   id: 'usr-ayush-01',
   name: 'Ayush Sharma',
   email: 'ayush.sharma@prajapulse.org',
-  avatar: '/profile_3d_avatar.jpg',
+  avatar: '',
   neighborhood: 'Indiranagar 12th Main',
   wardNumber: 'Ward 112',
   points: 340,

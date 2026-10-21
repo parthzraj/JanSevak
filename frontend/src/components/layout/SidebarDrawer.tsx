@@ -15,15 +15,14 @@ import {
   ChevronRight,
   ShieldCheck,
   Sparkles,
-  Sun,
-  Moon,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { Avatar } from '../common/Avatar';
 
 export const SidebarDrawer: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isSidebarOpen, setIsSidebarOpen, logout, theme, toggleTheme } = useApp();
+  const { user, isSidebarOpen, setIsSidebarOpen, logout } = useApp();
 
   // Close on Escape key press
   useEffect(() => {
@@ -161,14 +160,7 @@ export const SidebarDrawer: React.FC = () => {
           >
             <div className="relative shrink-0">
               <div className="w-13 h-13 rounded-2xl overflow-hidden p-0.5 border-2 border-[#ea580c] bg-white/10 shadow-md group-hover:border-white transition-colors">
-                <img
-                  src="/profile_3d_avatar.jpg"
-                  alt={user.name}
-                  className="w-full h-full object-cover rounded-xl"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = user.avatar;
-                  }}
-                />
+                <Avatar src={user.avatar} name={user.name} size={46} className="rounded-xl" />
               </div>
               <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-0.5 text-white ring-2 ring-[#0f2d59]">
                 <ShieldCheck className="w-3 h-3" />
@@ -244,28 +236,6 @@ export const SidebarDrawer: React.FC = () => {
 
         {/* Bottom Actions & Footer */}
         <div className="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0b1120] space-y-2.5">
-          {/* Theme Quick Toggle Row */}
-          <div className="flex items-center justify-between p-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-            <div className="flex items-center gap-2 min-w-0">
-              {theme === 'dark' ? (
-                <Moon className="w-4 h-4 text-amber-400 shrink-0" />
-              ) : (
-                <Sun className="w-4 h-4 text-amber-600 shrink-0" />
-              )}
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-[#0f2d59] hover:bg-[#1d4e8c] text-white shadow-xs transition-colors cursor-pointer shrink-0"
-              title="Switch Theme"
-            >
-              {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
-            </button>
-          </div>
-
           {/* Logout Button */}
           <button
             onClick={handleLogout}

@@ -20,6 +20,7 @@ export interface Comment {
   text: string;
   time: string;
   isOfficial?: boolean;
+  userId?: string;
 }
 
 export interface CivicPost {

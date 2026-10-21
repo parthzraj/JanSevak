@@ -34,9 +34,12 @@ Tests: `python -m pytest -q` (uses a throw-away database, no AI service needed).
 
 | Area | Endpoint |
 |---|---|
-| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PATCH /auth/me` (`POST /auth/token` is the form login used by Swagger) |
+| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PATCH /auth/me` (name, ward, `avatar_url` = `preset:<man|woman|neutral>-N`, an `/uploads/...` photo, or `""` to reset) (`POST /auth/token` is the form login used by Swagger) |
 | Issues | `GET /issues` (`category`, `status`, `priority`, `q`, `sort=recent\|votes`, `page`, `page_size`), `POST /issues`, `GET /issues/{id}`, `PATCH /issues/{id}/status` (official/admin only) |
+| Delete | `DELETE /issues/{id}` (own report while status is still `Reported`; admins any report; the points it earned are taken back) |
 | Votes | `POST /issues/{id}/upvote`, `DELETE /issues/{id}/upvote` |
+| Users | `GET /users/{id}` (public profile: no email) |
+| Analytics | `GET /analytics/summary` (live counts for the signed-in user and for the whole community: status, categories, resolution rate, average hours to resolve) |
 | Evidence & supporters | `POST /issues/{id}/evidence` (multipart `files`, 1-3 photos, +10 pts once per issue, not on your own report), `GET /issues/{id}/supporters` |
 | Comments | `POST /issues/{id}/comments`, `GET /issues/{id}/comments` |
 | Rewards | `GET /rewards/wallet`, `GET /rewards/history`, `GET /rewards/leaderboard`, `POST /rewards/claim` (quiz / academy only) |
@@ -59,6 +62,14 @@ If Developer 1's service is down you get `503 {"detail": "AI inference engine is
 * **No self-verification:** you cannot upvote your own report.
 * Removing an upvote takes back what it paid, once. Vote/unvote cycles cannot farm points.
 * Tiers: Bronze 0-99, Silver 100-299, Gold 300-749, Platinum 750-1999, Legend 2000+.
+
+## Report quality rules (`app/services/report_quality.py`, switch off with `STRICT_REPORT_RULES=false`)
+
+A new report needs at least one uploaded photo, a title of 8+ characters, a real description (30+ characters, 6+ words,
+not repeated characters) and a location (address of 5+ characters, or GPS / map pin). A report that repeats an existing
+one is rejected with `409`: the same user within 24 h, or anybody within ~150 m in the same category with a similar
+title/description in the last 14 days; the body of that error has `code` and the existing `issue_id`.
+Limit: `MAX_REPORTS_PER_DAY` (default 10) per user. Deleted reports stay as hidden empty rows so ids are never reused.
 
 ## Photo checks (`app/services/image_check.py`)
 

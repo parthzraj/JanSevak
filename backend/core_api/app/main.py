@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import INSECURE_DEFAULT_SECRET, settings
 from app.core.database import create_all_tables
-from app.routers import auth, issues, notifications, proxy_ai, rewards, uploads, votes
+from app.routers import analytics, auth, issues, notifications, proxy_ai, rewards, uploads, users, votes
 
 logger = logging.getLogger("prajapulse")
 
@@ -43,7 +43,7 @@ app.add_middleware(
 )
 
 api = APIRouter(prefix="/api")
-for module in (auth, issues, votes, rewards, notifications, uploads, proxy_ai):
+for module in (auth, users, issues, votes, rewards, notifications, uploads, analytics, proxy_ai):
     api.include_router(module.router)
 app.include_router(api)
 

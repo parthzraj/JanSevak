@@ -33,6 +33,9 @@ class CivicIssue(Base):
     upvotes = Column(Integer, nullable=False, default=0)
     created_at = Column(UTCDateTime, nullable=False, default=utcnow, index=True)
     updated_at = Column(UTCDateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    # Set when the reporter (or an admin) deletes the report. The row stays as an empty tombstone so the id is never
+    # reused (reward de-duplication is keyed by issue id), but it is hidden from every query.
+    deleted_at = Column(UTCDateTime, nullable=True, index=True)
 
     reporter = relationship("User", lazy="joined")
     comments = relationship(

@@ -72,7 +72,10 @@ def _add_missing_columns() -> None:
     """create_all never alters existing tables, so add columns introduced after a DB file was created."""
     from sqlalchemy import inspect, text
 
-    wanted = {"issue_evidence": [("image_hash", "VARCHAR(16)")]}
+    wanted = {
+        "issue_evidence": [("image_hash", "VARCHAR(16)")],
+        "civic_issues": [("deleted_at", "DATETIME")],
+    }
     inspector = inspect(engine)
     with engine.begin() as conn:
         for table, columns in wanted.items():

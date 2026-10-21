@@ -32,6 +32,12 @@ from app.services.points_engine import tier_for  # noqa: E402
 
 PASSWORD = "demo123"
 
+AVATARS = {  # built-in avatar illustrations (users can change them in Edit Profile)
+    "ayush@example.com": "preset:man-1",
+    "priya@example.com": "preset:woman-1",
+    "rahul@example.com": "preset:man-2",
+}
+
 USERS = [
     # name, email, ward, points, role
     ("Ayush Sharma", "ayush@example.com", "Ward 112 - Indiranagar", 340, "citizen"),
@@ -109,6 +115,7 @@ def main() -> None:
                     points=points,
                     tier=tier_for(points),
                     role=role,
+                    avatar_url=AVATARS.get(email),
                 )
                 db.add(user)
                 db.flush()
