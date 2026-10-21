@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import * as maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import * as L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
@@ -31,23 +31,40 @@ interface RouteInfo {
   durationText: string;
   distanceMeters: number;
   durationSeconds: number;
-  coordinates: [number, number][];
+  coordinates: [number, number][]; // [lng, lat] from OSRM GeoJSON
 }
 
-const TILE_STYLES = {
+type TileStyleKey = 'dark' | 'osm';
+
+interface TileStyleConfig {
+  name: string;
+  url: string;
+  subdomains?: string;
+  attribution: string;
+  maxZoom: number;
+}
+
+const TILE_STYLES: Record<TileStyleKey, TileStyleConfig> = {
   dark: {
-    name: 'Dark (Default)',
-    url: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    name: 'Dark Matter (Ola Style)',
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    subdomains: 'abcd',
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    maxZoom: 20,
   },
-  positron: {
-    name: 'Positron',
-    url: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+  osm: {
+    name: 'OpenStreetMap (Standard)',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
   },
 };
 
 /** Default center of India when no coordinates are present */
-const DEFAULT_CENTER: [number, number] = [78.9629, 20.5937];
-const DEFAULT_ZOOM = 4.8;
+const DEFAULT_CENTER: [number, number] = [20.5937, 78.9629]; // [lat, lng] for Leaflet
+const DEFAULT_ZOOM = 5;
 
 function formatDistance(meters: number): string {
   if (meters < 1000) {
@@ -70,9 +87,10 @@ function formatDuration(seconds: number): string {
 }
 
 /**
- * Interactive in-app civic map experience powered by MapLibre GL JS.
- * Features dark-matter tiles, pulsing issue & user GPS pins, OSRM live routing,
- * glassmorphic navigation sheet, and smooth motion animations.
+ * Interactive in-app civic map experience powered by OpenStreetMap / Leaflet.
+ * Works 100% reliably in every browser (no WebGL requirement).
+ * Features dark Ola/Rapido raster tiles, pulsing issue & user GPS pins,
+ * OSRM live driving route, glassmorphic navigation sheet, and smooth animations.
  */
 export const IssueMapView: React.FC<IssueMapViewProps> = ({
   title,
@@ -82,13 +100,19 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
   onClose,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const issueMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const userMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const issueMarkerRef = useRef<L.Marker | null>(null);
+  const userMarkerRef = useRef<L.Marker | null>(null);
+  const routeLayersRef = useRef<L.Polyline[]>([]);
 
-  const hasCoords = typeof latitude === 'number' && typeof longitude === 'number' && !isNaN(latitude) && !isNaN(longitude);
+  const hasCoords =
+    typeof latitude === 'number' &&
+    typeof longitude === 'number' &&
+    !isNaN(latitude) &&
+    !isNaN(longitude);
 
-  const [mapStyleKey, setMapStyleKey] = useState<'dark' | 'positron'>('dark');
+  const [mapStyleKey, setMapStyleKey] = useState<TileStyleKey>('dark');
   const [mapLoaded, setMapLoaded] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -117,7 +141,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
     };
   }, [onClose]);
 
-  // Request user's geolocation
+  // Request user's GPS geolocation
   const requestUserLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setGeoError('Geolocation is not supported by your browser');
@@ -144,99 +168,116 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
     );
   }, []);
 
-  // Fetch initial location on mount
+  // Fetch initial user location on mount
   useEffect(() => {
     requestUserLocation();
   }, [requestUserLocation]);
 
-  // Initialize MapLibre instance
+  // Initialize Leaflet Map instance
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    const initialCenter: [number, number] = hasCoords ? [longitude!, latitude!] : DEFAULT_CENTER;
+    const initialCenter: [number, number] = hasCoords ? [latitude!, longitude!] : DEFAULT_CENTER;
     const initialZoom = hasCoords ? 15 : DEFAULT_ZOOM;
 
-    const map = new maplibregl.Map({
-      container: mapContainerRef.current,
-      style: TILE_STYLES[mapStyleKey].url,
+    const map = L.map(mapContainerRef.current, {
       center: initialCenter,
       zoom: initialZoom,
-      pitch: 35,
-      bearing: 0,
+      zoomControl: false,
       attributionControl: false,
     });
 
-    // Add minimal navigation control
-    map.addControl(
-      new maplibregl.NavigationControl({
-        showCompass: true,
-        showZoom: false,
-        visualizePitch: true,
-      }),
-      'top-right'
-    );
+    const activeConfig = TILE_STYLES[mapStyleKey];
+    const tileLayer = L.tileLayer(activeConfig.url, {
+      subdomains: activeConfig.subdomains || 'abc',
+      maxZoom: activeConfig.maxZoom,
+      attribution: activeConfig.attribution,
+    }).addTo(map);
 
-    map.on('load', () => {
-      setMapLoaded(true);
-    });
-
+    tileLayerRef.current = tileLayer;
     mapRef.current = map;
+    setMapLoaded(true);
+
+    // Invalidate size after layout settles to guarantee full-canvas rendering
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
 
     return () => {
+      clearTimeout(timer);
       map.remove();
       mapRef.current = null;
+      tileLayerRef.current = null;
       setMapLoaded(false);
     };
-  }, [mapStyleKey]);
+  }, []);
+
+  // Switch tile layer when style key changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+    }
+
+    const activeConfig = TILE_STYLES[mapStyleKey];
+    const newLayer = L.tileLayer(activeConfig.url, {
+      subdomains: activeConfig.subdomains || 'abc',
+      maxZoom: activeConfig.maxZoom,
+      attribution: activeConfig.attribution,
+    }).addTo(map);
+
+    tileLayerRef.current = newLayer;
+  }, [mapStyleKey, mapLoaded]);
 
   // Add or update the Issue Marker
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded || !hasCoords) return;
 
-    // Remove existing issue marker
     if (issueMarkerRef.current) {
-      issueMarkerRef.current.remove();
+      map.removeLayer(issueMarkerRef.current);
       issueMarkerRef.current = null;
     }
 
-    // Build custom pulsing red marker element
-    const el = document.createElement('div');
-    el.className = 'issue-map-pin-wrapper';
-    el.innerHTML = `
-      <div class="relative flex items-center justify-center cursor-pointer group select-none">
-        <span class="absolute w-12 h-12 rounded-full bg-rose-500/35 animate-pulse-ring pointer-events-none"></span>
-        <span class="absolute w-7 h-7 rounded-full bg-red-600/50 animate-pulse-ring-delayed pointer-events-none"></span>
-        <div class="relative z-10 flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-tr from-red-600 to-rose-500 text-white shadow-xl border-2 border-white transform transition-transform group-hover:scale-115">
-          <svg class="w-5 h-5 fill-none stroke-current stroke-[2.4]" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
-            <circle cx="12" cy="10" r="3" fill="currentColor"></circle>
-          </svg>
+    const issueIcon = L.divIcon({
+      className: 'issue-leaflet-marker',
+      html: `
+        <div style="position: relative; width: 44px; height: 48px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none;">
+          <span class="animate-pulse-ring" style="position: absolute; width: 48px; height: 48px; border-radius: 9999px; background: rgba(239, 68, 68, 0.4); pointer-events: none;"></span>
+          <span class="animate-pulse-ring-delayed" style="position: absolute; width: 32px; height: 32px; border-radius: 9999px; background: rgba(220, 38, 38, 0.5); pointer-events: none;"></span>
+          <div style="position: relative; z-index: 10; width: 36px; height: 36px; border-radius: 9999px; background: linear-gradient(135deg, #dc2626, #f43f5e); color: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4); border: 2.5px solid white;">
+            <svg style="width: 18px; height: 18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
+              <circle cx="12" cy="10" r="3" fill="currentColor"></circle>
+            </svg>
+          </div>
+          <div style="position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 8px; height: 8px; background: #dc2626; border-right: 1.5px solid white; border-bottom: 1.5px solid white; z-index: 5;"></div>
         </div>
-        <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-red-600 rotate-45 border-r border-b border-white z-0"></div>
-      </div>
-    `;
+      `,
+      iconSize: [44, 48],
+      iconAnchor: [22, 46],
+      popupAnchor: [0, -44],
+    });
 
-    const popup = new maplibregl.Popup({ offset: 25, closeButton: false }).setHTML(`
-      <div class="p-2 text-slate-900 font-sans max-w-[200px]">
-        <div class="text-[10px] font-bold text-red-600 uppercase tracking-wider">Civic Issue</div>
-        <div class="text-xs font-bold leading-snug line-clamp-2 mt-0.5">${title}</div>
-        <div class="text-[10px] text-slate-500 mt-1">${address}</div>
-      </div>
-    `);
-
-    const marker = new maplibregl.Marker({
-      element: el,
-      anchor: 'bottom',
-    })
-      .setLngLat([longitude!, latitude!])
-      .setPopup(popup)
+    const marker = L.marker([latitude!, longitude!], { icon: issueIcon })
+      .bindPopup(`
+        <div style="padding: 4px; font-family: sans-serif; max-width: 200px; color: #0f172a;">
+          <div style="font-size: 10px; font-weight: bold; color: #dc2626; text-transform: uppercase; letter-spacing: 0.05em;">Civic Issue</div>
+          <div style="font-size: 12px; font-weight: bold; margin-top: 2px; line-height: 1.3;">${title}</div>
+          <div style="font-size: 10px; color: #64748b; margin-top: 4px;">${address}</div>
+        </div>
+      `)
       .addTo(map);
 
     issueMarkerRef.current = marker;
 
     return () => {
-      marker.remove();
+      if (issueMarkerRef.current) {
+        map.removeLayer(issueMarkerRef.current);
+        issueMarkerRef.current = null;
+      }
     };
   }, [mapLoaded, hasCoords, latitude, longitude, title, address]);
 
@@ -246,43 +287,44 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
     if (!map || !mapLoaded || !userLocation) return;
 
     if (userMarkerRef.current) {
-      userMarkerRef.current.remove();
+      map.removeLayer(userMarkerRef.current);
       userMarkerRef.current = null;
     }
 
-    const userEl = document.createElement('div');
-    userEl.className = 'user-map-pin-wrapper';
-    userEl.innerHTML = `
-      <div class="relative flex items-center justify-center cursor-pointer select-none">
-        <span class="absolute w-10 h-10 rounded-full bg-blue-500/40 animate-pulse-ring pointer-events-none"></span>
-        <div class="relative z-10 w-6 h-6 rounded-full bg-gradient-to-tr from-blue-600 to-sky-400 border-2 border-white shadow-lg flex items-center justify-center">
-          <div class="w-2.5 h-2.5 rounded-full bg-white shadow-xs"></div>
+    const userIcon = L.divIcon({
+      className: 'user-leaflet-marker',
+      html: `
+        <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          <span class="animate-pulse-ring" style="position: absolute; width: 36px; height: 36px; border-radius: 9999px; background: rgba(59, 130, 246, 0.45); pointer-events: none;"></span>
+          <div style="position: relative; z-index: 10; width: 22px; height: 22px; border-radius: 9999px; background: linear-gradient(135deg, #2563eb, #38bdf8); border: 2.5px solid white; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); display: flex; align-items: center; justify-content: center;">
+            <div style="width: 8px; height: 8px; border-radius: 9999px; background: white;"></div>
+          </div>
         </div>
-      </div>
-    `;
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+      popupAnchor: [0, -16],
+    });
 
-    const popup = new maplibregl.Popup({ offset: 15, closeButton: false }).setHTML(`
-      <div class="px-2 py-1 text-slate-900 font-sans text-xs font-semibold">
-        Your current location
-      </div>
-    `);
-
-    const marker = new maplibregl.Marker({
-      element: userEl,
-      anchor: 'center',
-    })
-      .setLngLat([userLocation.lng, userLocation.lat])
-      .setPopup(popup)
+    const marker = L.marker([userLocation.lat, userLocation.lng], { icon: userIcon })
+      .bindPopup(`
+        <div style="padding: 4px; font-family: sans-serif; font-size: 11px; font-weight: bold; color: #0f172a;">
+          Your current GPS location
+        </div>
+      `)
       .addTo(map);
 
     userMarkerRef.current = marker;
 
     return () => {
-      marker.remove();
+      if (userMarkerRef.current) {
+        map.removeLayer(userMarkerRef.current);
+        userMarkerRef.current = null;
+      }
     };
   }, [mapLoaded, userLocation]);
 
-  // Fetch route from OSRM and render GeoJSON LineString
+  // Fetch driving route from OSRM Directions API
   useEffect(() => {
     if (!hasCoords || !userLocation) {
       setRouteInfo(null);
@@ -331,115 +373,70 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
     };
   }, [hasCoords, latitude, longitude, userLocation]);
 
-  // Render route layer on MapLibre map and adjust bounds
+  // Render Route Polyline on Leaflet and adjust map view
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    const sourceId = 'osrm-route-source';
-    const glowLayerId = 'osrm-route-glow';
-    const lineLayerId = 'osrm-route-line';
-
-    const removeRouteLayers = () => {
-      if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
-      if (map.getLayer(glowLayerId)) map.removeLayer(glowLayerId);
-      if (map.getSource(sourceId)) map.removeSource(sourceId);
-    };
+    // Clear previous route polylines
+    routeLayersRef.current.forEach((layer) => {
+      map.removeLayer(layer);
+    });
+    routeLayersRef.current = [];
 
     if (routeInfo && routeInfo.coordinates.length > 0) {
-      removeRouteLayers();
+      // Convert GeoJSON [lng, lat] to Leaflet [lat, lng]
+      const latLngs = routeInfo.coordinates.map(
+        ([lng, lat]) => [lat, lng] as [number, number]
+      );
 
-      map.addSource(sourceId, {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: routeInfo.coordinates,
-          },
-        },
-      });
+      // Glow polyline
+      const glow = L.polyline(latLngs, {
+        color: '#3b82f6',
+        weight: 10,
+        opacity: 0.35,
+        lineCap: 'round',
+        lineJoin: 'round',
+      }).addTo(map);
 
-      // Glow layer for premium navigation appearance
-      map.addLayer({
-        id: glowLayerId,
-        type: 'line',
-        source: sourceId,
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round',
-        },
-        paint: {
-          'line-color': '#3b82f6',
-          'line-width': 10,
-          'line-opacity': 0.35,
-          'line-blur': 4,
-        },
-      });
+      // Core route polyline
+      const line = L.polyline(latLngs, {
+        color: '#3b82f6',
+        weight: 4.5,
+        opacity: 0.95,
+        lineCap: 'round',
+        lineJoin: 'round',
+      }).addTo(map);
 
-      // Core crisp route line
-      map.addLayer({
-        id: lineLayerId,
-        type: 'line',
-        source: sourceId,
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round',
-        },
-        paint: {
-          'line-color': '#3b82f6',
-          'line-width': 4.5,
-          'line-opacity': 0.95,
-        },
-      });
+      routeLayersRef.current = [glow, line];
 
-      // Fit bounds to show entire route + user + issue
-      const bounds = new maplibregl.LngLatBounds();
-      routeInfo.coordinates.forEach((coord) => bounds.extend(coord));
-      if (userLocation) bounds.extend([userLocation.lng, userLocation.lat]);
-      if (hasCoords) bounds.extend([longitude!, latitude!]);
-
-      map.fitBounds(bounds, {
-        padding: { top: 90, bottom: 280, left: 60, right: 60 },
+      // Auto-fit bounds with padding
+      map.fitBounds(line.getBounds(), {
+        paddingTopLeft: [40, 90],
+        paddingBottomRight: [40, 290],
         maxZoom: 16,
-        duration: 900,
       });
     } else if (hasCoords && userLocation) {
-      // No route line, but fit both points
-      removeRouteLayers();
-      const bounds = new maplibregl.LngLatBounds();
-      bounds.extend([longitude!, latitude!]);
-      bounds.extend([userLocation.lng, userLocation.lat]);
+      const bounds = L.latLngBounds([
+        [latitude!, longitude!],
+        [userLocation.lat, userLocation.lng],
+      ]);
       map.fitBounds(bounds, {
-        padding: { top: 90, bottom: 280, left: 60, right: 60 },
+        paddingTopLeft: [40, 90],
+        paddingBottomRight: [40, 290],
         maxZoom: 15,
-        duration: 800,
       });
     } else if (hasCoords) {
-      removeRouteLayers();
-      map.flyTo({
-        center: [longitude!, latitude!],
-        zoom: 15,
-        duration: 800,
-      });
+      map.setView([latitude!, longitude!], 15);
     }
-
-    return () => {
-      removeRouteLayers();
-    };
   }, [mapLoaded, routeInfo, hasCoords, latitude, longitude, userLocation]);
 
-  // Center on user location
+  // Center on user GPS position
   const handleFlyToUser = () => {
     const map = mapRef.current;
     if (!map) return;
     if (userLocation) {
-      map.flyTo({
-        center: [userLocation.lng, userLocation.lat],
-        zoom: 16,
-        duration: 800,
-      });
+      map.flyTo([userLocation.lat, userLocation.lng], 16, { duration: 0.8 });
     } else {
       requestUserLocation();
     }
@@ -449,36 +446,33 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
   const handleFlyToIssue = () => {
     const map = mapRef.current;
     if (!map || !hasCoords) return;
-    map.flyTo({
-      center: [longitude!, latitude!],
-      zoom: 16,
-      duration: 800,
-    });
+    map.flyTo([latitude!, longitude!], 16, { duration: 0.8 });
   };
 
-  // Fit both markers
+  // Fit both markers & route
   const handleFitRoute = () => {
     const map = mapRef.current;
     if (!map) return;
-    if (routeInfo && routeInfo.coordinates.length > 0) {
-      const bounds = new maplibregl.LngLatBounds();
-      routeInfo.coordinates.forEach((coord) => bounds.extend(coord));
-      map.fitBounds(bounds, {
-        padding: { top: 90, bottom: 280, left: 60, right: 60 },
+
+    if (routeLayersRef.current.length > 0) {
+      const line = routeLayersRef.current[routeLayersRef.current.length - 1];
+      map.fitBounds(line.getBounds(), {
+        paddingTopLeft: [40, 90],
+        paddingBottomRight: [40, 290],
         maxZoom: 16,
-        duration: 800,
       });
     } else if (hasCoords && userLocation) {
-      const bounds = new maplibregl.LngLatBounds();
-      bounds.extend([longitude!, latitude!]);
-      bounds.extend([userLocation.lng, userLocation.lat]);
+      const bounds = L.latLngBounds([
+        [latitude!, longitude!],
+        [userLocation.lat, userLocation.lng],
+      ]);
       map.fitBounds(bounds, {
-        padding: { top: 90, bottom: 280, left: 60, right: 60 },
+        paddingTopLeft: [40, 90],
+        paddingBottomRight: [40, 290],
         maxZoom: 15,
-        duration: 800,
       });
     } else if (hasCoords) {
-      map.flyTo({ center: [longitude!, latitude!], zoom: 15, duration: 600 });
+      map.setView([latitude!, longitude!], 15);
     }
   };
 
@@ -491,7 +485,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
     setTimeout(() => setCopiedCoords(false), 2000);
   };
 
-  // External navigation URL
+  // External turn-by-turn navigation URL
   const navigationUrl = hasCoords
     ? `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving`
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
@@ -507,7 +501,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
       <style>{`
         @keyframes pulse-ring {
           0% { transform: scale(0.5); opacity: 0.95; }
-          100% { transform: scale(2.5); opacity: 0; }
+          100% { transform: scale(2.4); opacity: 0; }
         }
         @keyframes pulse-ring-delayed {
           0% { transform: scale(0.5); opacity: 0.8; }
@@ -520,18 +514,24 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
         .animate-pulse-ring-delayed {
           animation: pulse-ring-delayed 2s cubic-bezier(0.2, 0.6, 0.35, 1) infinite 0.5s;
         }
+        .issue-leaflet-marker, .user-leaflet-marker {
+          background: transparent !important;
+          border: none !important;
+        }
       `}</style>
 
       {/* TOP FLOATING APP BAR */}
-      <header className="absolute top-0 inset-x-0 z-30 flex items-center justify-between p-3 sm:p-4 pointer-events-none">
+      <header className="absolute top-0 inset-x-0 z-[1000] flex items-center justify-between p-3 sm:p-4 pointer-events-none">
         <div className="flex items-center gap-2 pointer-events-auto">
-          <div className="px-3 py-1.5 rounded-full bg-slate-900/85 backdrop-blur-md border border-white/15 text-white shadow-xl flex items-center gap-2">
+          <div className="px-3 py-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/15 text-white shadow-xl flex items-center gap-2">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
             </span>
             <span className="text-xs font-bold tracking-wide">Live Issue Map</span>
-            <span className="text-[10px] text-slate-400 border-l border-slate-700 pl-2">MapLibre</span>
+            <span className="text-[10px] text-slate-400 border-l border-slate-700 pl-2">
+              {mapStyleKey === 'dark' ? 'Ola Dark' : 'OpenStreetMap'}
+            </span>
           </div>
         </div>
 
@@ -539,9 +539,9 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
           {/* Toggle Map Tile Style */}
           <button
             type="button"
-            onClick={() => setMapStyleKey((prev) => (prev === 'dark' ? 'positron' : 'dark'))}
-            className="w-10 h-10 rounded-full bg-slate-900/85 backdrop-blur-md border border-white/15 text-white hover:bg-slate-800 transition-all shadow-xl flex items-center justify-center active:scale-95"
-            title={`Switch to ${mapStyleKey === 'dark' ? 'Positron' : 'Dark'} style`}
+            onClick={() => setMapStyleKey((prev) => (prev === 'dark' ? 'osm' : 'dark'))}
+            className="w-10 h-10 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-slate-800 transition-all shadow-xl flex items-center justify-center active:scale-95 cursor-pointer"
+            title={`Switch to ${mapStyleKey === 'dark' ? 'OpenStreetMap' : 'Dark Matter'} style`}
             aria-label="Toggle map style"
           >
             <Layers className="w-4 h-4 text-sky-400" />
@@ -551,7 +551,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-10 h-10 rounded-full bg-slate-900/85 backdrop-blur-md border border-white/15 text-white hover:bg-rose-600 hover:border-rose-500 transition-all shadow-xl flex items-center justify-center active:scale-95"
+            className="w-10 h-10 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-rose-600 hover:border-rose-500 transition-all shadow-xl flex items-center justify-center active:scale-95 cursor-pointer"
             title="Close map"
             aria-label="Close interactive map"
           >
@@ -561,15 +561,19 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
       </header>
 
       {/* MAP CANVAS CONTAINER */}
-      <div ref={mapContainerRef} className="w-full h-full flex-1 relative bg-slate-950" />
+      <div
+        ref={mapContainerRef}
+        className="w-full h-full flex-1 relative bg-slate-950 z-0"
+        style={{ minHeight: '100%' }}
+      />
 
       {/* RIGHT FLOATING MAP CONTROLS */}
-      <div className="absolute right-3.5 top-20 z-20 flex flex-col gap-2">
+      <div className="absolute right-3.5 top-20 z-[1000] flex flex-col gap-2">
         {/* Recenter on Route */}
         <button
           type="button"
           onClick={handleFitRoute}
-          className="w-10 h-10 rounded-xl bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-[#0f2d59] transition-all shadow-lg flex items-center justify-center active:scale-90"
+          className="w-10 h-10 rounded-xl bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-[#0f2d59] transition-all shadow-lg flex items-center justify-center active:scale-90 cursor-pointer"
           title="Fit route and markers"
           aria-label="Fit route"
         >
@@ -580,7 +584,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
         <button
           type="button"
           onClick={handleFlyToUser}
-          className={`w-10 h-10 rounded-xl bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-[#0f2d59] transition-all shadow-lg flex items-center justify-center active:scale-90 ${
+          className={`w-10 h-10 rounded-xl bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-[#0f2d59] transition-all shadow-lg flex items-center justify-center active:scale-90 cursor-pointer ${
             geoLoading ? 'animate-pulse text-blue-400' : ''
           }`}
           title={userLocation ? 'Fly to your GPS location' : 'Locate my position'}
@@ -594,7 +598,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
           <button
             type="button"
             onClick={handleFlyToIssue}
-            className="w-10 h-10 rounded-xl bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-red-600 transition-all shadow-lg flex items-center justify-center active:scale-90"
+            className="w-10 h-10 rounded-xl bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-red-600 transition-all shadow-lg flex items-center justify-center active:scale-90 cursor-pointer"
             title="Focus on issue location"
             aria-label="Focus issue pin"
           >
@@ -606,7 +610,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
         <button
           type="button"
           onClick={() => mapRef.current?.zoomIn()}
-          className="w-10 h-10 rounded-xl bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-[#0f2d59] transition-all shadow-lg flex items-center justify-center font-bold text-base active:scale-90"
+          className="w-10 h-10 rounded-xl bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-[#0f2d59] transition-all shadow-lg flex items-center justify-center font-bold text-base active:scale-90 cursor-pointer"
           title="Zoom In"
           aria-label="Zoom In"
         >
@@ -617,7 +621,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
         <button
           type="button"
           onClick={() => mapRef.current?.zoomOut()}
-          className="w-10 h-10 rounded-xl bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-[#0f2d59] transition-all shadow-lg flex items-center justify-center font-bold text-base active:scale-90"
+          className="w-10 h-10 rounded-xl bg-slate-900/90 backdrop-blur-md border border-white/15 text-white hover:bg-[#0f2d59] transition-all shadow-lg flex items-center justify-center font-bold text-base active:scale-90 cursor-pointer"
           title="Zoom Out"
           aria-label="Zoom Out"
         >
@@ -632,14 +636,14 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 120, opacity: 0 }}
           transition={{ type: 'spring', damping: 26, stiffness: 280 }}
-          className="absolute bottom-0 inset-x-0 z-30 pointer-events-auto"
+          className="absolute bottom-0 inset-x-0 z-[1000] pointer-events-auto"
         >
           <div className="w-full max-w-xl mx-auto bg-white/95 backdrop-blur-xl border-t border-x border-white/60 rounded-t-3xl sm:rounded-3xl shadow-2xl p-4 sm:p-5 text-slate-900">
             {/* Grab handle bar */}
             <button
               type="button"
               onClick={() => setIsSheetCollapsed((v) => !v)}
-              className="w-full flex items-center justify-center pb-2 focus:outline-hidden"
+              className="w-full flex items-center justify-center pb-2 focus:outline-hidden cursor-pointer"
               aria-label="Toggle details view"
             >
               <div className="w-12 h-1.5 bg-slate-300 rounded-full transition-colors hover:bg-slate-400" />
@@ -721,7 +725,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
                     <button
                       type="button"
                       onClick={handleCopyCoords}
-                      className="flex items-center gap-1 text-[11px] font-bold text-[#0f2d59] hover:text-blue-600 transition-colors"
+                      className="flex items-center gap-1 text-[11px] font-bold text-[#0f2d59] hover:text-blue-600 transition-colors cursor-pointer"
                       title="Copy coordinates"
                     >
                       {copiedCoords ? (
@@ -751,7 +755,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
                 href={navigationUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-[#0f2d59] to-[#1d4e8c] hover:from-[#13376d] hover:to-[#225ba3] active:scale-[0.99] text-white text-xs sm:text-sm font-bold shadow-md transition-all"
+                className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-[#0f2d59] to-[#1d4e8c] hover:from-[#13376d] hover:to-[#225ba3] active:scale-[0.99] text-white text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer"
               >
                 <Navigation className="w-4 h-4 text-sky-300" />
                 <span>Start Turn-by-Turn</span>
@@ -761,7 +765,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
                 <button
                   type="button"
                   onClick={handleFitRoute}
-                  className="px-3.5 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-[#0f2d59] text-xs sm:text-sm font-bold transition-colors flex items-center gap-1.5"
+                  className="px-3.5 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-[#0f2d59] text-xs sm:text-sm font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
                   title="View full route on map"
                 >
                   <Route className="w-4 h-4 text-blue-600" />
@@ -772,7 +776,7 @@ export const IssueMapView: React.FC<IssueMapViewProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold transition-colors"
+                className="px-4 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
               >
                 Close
               </button>
