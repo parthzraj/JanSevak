@@ -31,15 +31,18 @@ export const assetUrl = (url: string): string => (url.startsWith('/uploads/') ? 
 // Low-level request helper
 // ---------------------------------------------------------------------------
 interface ApiErrorResponse {
-  detail?: string | { msg?: string }[];
+  detail?: string | { msg?: string }[] | { message?: string; [key: string]: unknown };
 }
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** Extra fields from the server, e.g. { code: 'duplicate_report', issue_id: 12 } */
+  data?: Record<string, unknown>;
+  constructor(message: string, status: number, data?: Record<string, unknown>) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -47,14 +50,19 @@ export const UNAUTHORIZED_EVENT = 'prajapulse:unauthorized';
 
 async function parseError(response: Response): Promise<ApiError> {
   let message = `Backend request failed (${response.status})`;
+  let data: Record<string, unknown> | undefined;
   try {
     const error = (await response.json()) as ApiErrorResponse;
     if (typeof error.detail === 'string') message = error.detail;
     else if (Array.isArray(error.detail)) message = error.detail.map((d) => d.msg).filter(Boolean).join('; ') || message;
+    else if (error.detail && typeof error.detail === 'object') {
+      message = typeof error.detail.message === 'string' ? error.detail.message : message;
+      data = error.detail as Record<string, unknown>;
+    }
   } catch {
     // Preserve the HTTP error when the backend did not return JSON.
   }
-  return new ApiError(message, response.status);
+  return new ApiError(message, response.status, data);
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -138,9 +146,26 @@ export interface BackendIssue {
   updated_at: string;
 }
 
+export interface BackendEvidence {
+  id: number;
+  url: string;
+  user_id: number;
+  author: string;
+  created_at: string;
+}
+
+export interface BackendSupporter {
+  user_id: number;
+  name: string;
+  avatar_url: string | null;
+  ward: string | null;
+  supported_at: string;
+}
+
 export interface BackendIssueDetail extends BackendIssue {
   comments: BackendComment[];
   timeline: { status: string; note: string | null; created_at: string }[];
+  evidence: BackendEvidence[];
 }
 
 export interface BackendNotification {
@@ -181,13 +206,45 @@ export const registerRequest = (input: { name: string; email: string; password: 
 
 export const fetchMe = () => request<BackendUser>('/api/auth/me');
 
-export const updateMe = (input: { name?: string; ward?: string }) =>
+export const updateMe = (input: { name?: string; ward?: string; avatar_url?: string }) =>
   request<BackendUser>('/api/auth/me', { method: 'PATCH', body: JSON.stringify(input) });
+
+export interface BackendPublicUser {
+  id: number;
+  name: string;
+  ward: string | null;
+  avatar_url: string | null;
+  role: 'citizen' | 'official' | 'admin';
+  points: number;
+  tier: string;
+  reports_count: number;
+  supported_count: number;
+  resolved_count: number;
+  created_at: string;
+}
+
+/** Another citizen's public profile (no email). */
+export const fetchPublicUser = (id: number | string) => request<BackendPublicUser>(`/api/users/${id}`);
+
+export interface BackendStats {
+  total: number;
+  reported: number;
+  in_progress: number;
+  resolved: number;
+  resolution_rate: number;
+  avg_resolution_hours: number | null;
+  last_7_days: number;
+  by_category: { category: string; count: number; percent: number }[];
+}
+
+export const fetchAnalytics = () => request<{ mine: BackendStats; community: BackendStats }>('/api/analytics/summary');
 
 // ---------------------------------------------------------------------------
 // Issues, votes, comments
 // ---------------------------------------------------------------------------
-export const fetchIssues = (params: { page_size?: number; sort?: 'recent' | 'votes'; category?: string } = {}) => {
+export const fetchIssues = (
+  params: { page_size?: number; sort?: 'recent' | 'votes'; category?: string; reporter_id?: number } = {}
+) => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => v !== undefined && query.set(k, String(v)));
   return request<{ items: BackendIssue[]; total: number }>(`/api/issues?${query.toString()}`);
@@ -210,12 +267,40 @@ export const createIssueRequest = (input: {
     input
   );
 
+export const deleteIssueRequest = (id: number | string) =>
+  request<{ deleted_id: number; points_reverted: number; user_points: number; user_tier: string }>(`/api/issues/${id}`, {
+    method: 'DELETE',
+  });
+
 export const upvoteIssue = (id: number | string) => post<VoteResult>(`/api/issues/${id}/upvote`);
 
 export const removeUpvote = (id: number | string) => request<VoteResult>(`/api/issues/${id}/upvote`, { method: 'DELETE' });
 
 export const addCommentRequest = (id: number | string, text: string) =>
   post<BackendComment>(`/api/issues/${id}/comments`, { text });
+
+export const fetchSupporters = (id: number | string) =>
+  request<{ total: number; items: BackendSupporter[] }>(`/api/issues/${id}/supporters?limit=50`);
+
+/** Adds 1-3 on-site photos to an existing issue. */
+export async function uploadEvidence(
+  id: number | string,
+  files: File[]
+): Promise<{ evidence: BackendEvidence[]; points_awarded: number; user_points: number; user_tier: string }> {
+  const form = new FormData();
+  files.forEach((f) => form.append('files', f));
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}/api/issues/${id}/evidence`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form, // the browser sets the multipart Content-Type itself
+  });
+  if (!response.ok) {
+    if (response.status === 401 && token) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    throw await parseError(response);
+  }
+  return response.json();
+}
 
 export const updateIssueStatus = (id: number | string, status: string, note?: string) =>
   request<BackendIssueDetail>(`/api/issues/${id}/status`, {

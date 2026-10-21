@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { X, Send, ShieldCheck } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { Avatar } from '../common/Avatar';
+import { useProfileLink } from '../../lib/useProfileLink';
 
 export const CommentsSheet: React.FC = () => {
-  const navigate = useNavigate();
+  const openProfile = useProfileLink();
   const { selectedPostForComments, setSelectedPostForComments, addComment, user } = useApp();
   const [inputText, setInputText] = useState('');
 
@@ -17,9 +18,9 @@ export const CommentsSheet: React.FC = () => {
     setInputText('');
   };
 
-  const handleOpenProfile = () => {
+  const handleOpenProfile = (userId?: string, name?: string) => {
     setSelectedPostForComments(null);
-    navigate('/profile');
+    openProfile(userId, name);
   };
 
   return (
@@ -74,25 +75,18 @@ export const CommentsSheet: React.FC = () => {
               >
                 <button
                   type="button"
-                  onClick={handleOpenProfile}
+                  onClick={() => handleOpenProfile(comment.userId, comment.author)}
                   className="shrink-0 mt-0.5 cursor-pointer hover:opacity-80 transition-opacity"
                   title={`View profile for ${comment.author}`}
                 >
-                  <img
-                    src={comment.avatar}
-                    alt={comment.author}
-                    className="w-8 h-8 rounded-full object-cover shrink-0"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                  />
+                  <Avatar src={comment.avatar} name={comment.author} size={32} />
                 </button>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={handleOpenProfile}
+                        onClick={() => handleOpenProfile(comment.userId, comment.author)}
                         className="font-semibold text-xs text-[#0f172a] hover:underline cursor-pointer text-left"
                       >
                         {comment.author}
@@ -123,18 +117,11 @@ export const CommentsSheet: React.FC = () => {
         >
           <button
             type="button"
-            onClick={handleOpenProfile}
+            onClick={() => handleOpenProfile(user.id, user.name)}
             className="shrink-0 cursor-pointer hover:opacity-85 transition-opacity"
             title="View your profile"
           >
-            <img
-              src="/profile_3d_avatar.jpg"
-              alt={user.name}
-              className="w-8 h-8 rounded-full object-cover shrink-0 border border-slate-200"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = user.avatar;
-              }}
-            />
+            <Avatar src={user.avatar} name={user.name} size={32} className="border border-slate-200" />
           </button>
           <input
             type="text"

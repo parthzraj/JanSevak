@@ -19,10 +19,11 @@ import { useApp } from '../context/AppContext';
 import { CivicCategory, IssuePriority } from '../types';
 import { MapPickerModal } from '../components/report/MapPickerModal';
 import { improveDescription } from '../lib/api';
+import { reportChecklist, descriptionProblem, MIN_TITLE_CHARS } from '../lib/reportRules';
 
 export const CreateReportScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { createReport, user, addToast } = useApp();
+  const { createReport, user, addToast, duplicateReport, clearDuplicateReport, openIssueById } = useApp();
 
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<CivicCategory>('Roads');
@@ -126,10 +127,12 @@ export const CreateReportScreen: React.FC = () => {
 
   // Check if at least one location method is provided (Compulsory validation)
   const hasValidLocation = Boolean(
-    addressText.trim().length >= 3 ||
+    addressText.trim().length >= 5 ||
     gpsCoords !== null ||
     pinnedCoords !== null
   );
+
+  const checklist = reportChecklist({ title, description, photoCount: imagesList.length, hasLocation: hasValidLocation });
 
   const getEffectiveLocalityString = () => {
     if (addressText.trim()) {
@@ -146,8 +149,16 @@ export const CreateReportScreen: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !description.trim()) {
-      addToast('Missing Information', 'Please provide a title and description.', 'info');
+    if (!checklist.photo) {
+      addToast('Photo Required', 'Please attach at least one clear photo of the problem.', 'info');
+      return;
+    }
+    if (!checklist.title) {
+      addToast('Title Too Short', `Give the issue a clear title (at least ${MIN_TITLE_CHARS} characters).`, 'info');
+      return;
+    }
+    if (!checklist.description) {
+      addToast('Describe the Problem', descriptionProblem(description) ?? 'Please describe the problem.', 'info');
       return;
     }
 
@@ -479,10 +490,50 @@ export const CreateReportScreen: React.FC = () => {
           </p>
         </div>
 
+        {duplicateReport && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 space-y-2" role="alert">
+            <p className="font-bold">This problem may already be reported</p>
+            <p className="leading-snug">{duplicateReport.message}</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  const id = duplicateReport.issueId;
+                  clearDuplicateReport();
+                  navigate('/home');
+                  await openIssueById(id);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-[#0f2d59] text-white font-bold cursor-pointer"
+              >
+                View existing report
+              </button>
+              <button type="button" onClick={clearDuplicateReport} className="px-3 py-1.5 rounded-xl border border-amber-300 font-semibold cursor-pointer">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* What is still missing before the report can be sent */}
+        {!checklist.ok && (
+          <ul className="text-[11px] space-y-1 text-[#64748b] dark:text-slate-400" aria-label="Report checklist">
+            {[
+              [checklist.photo, 'At least one clear photo of the problem'],
+              [checklist.title, `A clear title (${MIN_TITLE_CHARS}+ characters)`],
+              [checklist.description, 'A real description (30+ characters, 6+ words)'],
+              [checklist.location, 'A location (address, GPS or map pin)'],
+            ].map(([done, label]) => (
+              <li key={String(label)} className={done ? 'text-emerald-700' : ''}>
+                {done ? '✓' : '○'} {label as string}
+              </li>
+            ))}
+          </ul>
+        )}
+
         {/* Submit Report Button */}
         <button
           type="submit"
-          disabled={isSubmitting || !title.trim() || !description.trim() || !hasValidLocation}
+          disabled={isSubmitting || !checklist.ok}
           className="w-full py-3.5 rounded-2xl bg-[#0f2d59] hover:bg-[#1d4e8c] dark:bg-blue-600 dark:hover:bg-blue-700 text-white font-extrabold text-sm shadow-lg shadow-[#0f2d59]/20 dark:shadow-blue-950/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-98 cursor-pointer"
         >
           {isSubmitting ? (

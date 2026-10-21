@@ -10,6 +10,7 @@ import {
   ChevronLeft,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { Avatar } from '../common/Avatar';
 
 export const ProfileSideDrawer: React.FC = () => {
   const navigate = useNavigate();
@@ -62,15 +63,7 @@ export const ProfileSideDrawer: React.FC = () => {
         {/* Top Avatar with Saffron/Gold Border and Toggle Tab */}
         <div className="relative mt-0.5 mb-1 flex items-center justify-center">
           <div className="w-[44px] h-[44px] rounded-full p-[1.5px] border-[2px] border-[#ea580c] bg-[#0a1e38] flex items-center justify-center shadow-md relative overflow-hidden">
-            <img
-              src="/profile_3d_avatar.jpg"
-              alt={user.name}
-              className="w-full h-full rounded-full object-cover"
-              onError={(e) => {
-                // Fallback to user.avatar if 3d avatar fails
-                (e.target as HTMLImageElement).src = user.avatar;
-              }}
-            />
+            <Avatar src={user.avatar} name={user.name} size={38} />
           </div>
 
           {/* Right edge chevron toggle tab */}

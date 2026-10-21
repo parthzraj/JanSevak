@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   ThumbsUp,
   MessageCircle,
@@ -14,6 +13,9 @@ import {
 } from 'lucide-react';
 import { CivicPost } from '../../types';
 import { useApp } from '../../context/AppContext';
+import { Avatar } from '../common/Avatar';
+import { useProfileLink } from '../../lib/useProfileLink';
+import { googleMapsUrl } from '../../lib/maps';
 
 interface FeedPostCardProps {
   post: CivicPost;
@@ -28,7 +30,7 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({ post }) => {
     addToast,
   } = useApp();
 
-  const navigate = useNavigate();
+  const openProfile = useProfileLink();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const postImages = post.images && post.images.length > 0 ? post.images : [post.imageUrl];
@@ -162,19 +164,12 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({ post }) => {
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              navigate('/profile');
+              openProfile(post.reporter.id, post.reporter.name);
             }}
             className="flex items-center gap-2 drop-shadow-md pointer-events-auto cursor-pointer hover:opacity-90 active:scale-95 transition-all group"
             title={`View profile for ${post.reporter.name}`}
           >
-            <img
-              src={post.reporter.avatar}
-              alt={post.reporter.name}
-              className="w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm group-hover:border-amber-300 transition-colors"
-              onError={(e) => {
-                (e.target as HTMLElement).style.display = 'none';
-              }}
-            />
+            <Avatar src={post.reporter.avatar} name={post.reporter.name} size={32} className="border-2 border-white shadow-sm group-hover:border-amber-300 transition-colors" />
             <div className="flex items-center gap-1">
               <span className="text-xs sm:text-sm font-bold text-white tracking-tight drop-shadow-sm group-hover:underline">
                 {post.reporter.name}
@@ -205,10 +200,10 @@ export const FeedPostCard: React.FC<FeedPostCardProps> = ({ post }) => {
             <button
               type="button"
               className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md border border-white/30 flex items-center justify-center text-white shadow-sm hover:bg-black/60 transition-colors"
-              title={post.reporter.wardOrArea}
+              title={`Open ${post.reporter.wardOrArea} in Google Maps`}
               onClick={(e) => {
                 e.stopPropagation();
-                addToast(post.reporter.wardOrArea, 'Location tagged', 'info');
+                window.open(googleMapsUrl(post), '_blank', 'noopener,noreferrer');
               }}
             >
               <MapPin className="w-4 h-4 text-white drop-shadow-xs" />

@@ -18,27 +18,46 @@ import {
   Bell,
   Globe,
   Sliders,
-  Sun,
-  Moon,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { CivicBadgeIcon, CivicLevelIcon } from '../components/common/CivicBadges';
+import { Avatar, AVATAR_PRESETS } from '../components/common/Avatar';
 
 export const ProfileScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, posts, badges, logout, updateUserProfile, setSelectedPostForDetail, addToast, theme, setTheme, toggleTheme } = useApp();
+  const { user, posts, logout, updateUserProfile, changeAvatar, setSelectedPostForDetail, addToast } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'reports' | 'saved' | 'badges'>('reports');
+  const [activeTab, setActiveTab] = useState<'reports' | 'saved'>('reports');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [savingAvatar, setSavingAvatar] = useState(false);
+
+  const pickAvatar = async (choice: string | File) => {
+    setSavingAvatar(true);
+    await changeAvatar(choice);
+    setSavingAvatar(false);
+  };
+
+  const onPhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
+      addToast('Choose an image', 'Pick a photo (JPG, PNG, WEBP) under 10 MB.', 'info');
+      return;
+    }
+    void pickAvatar(file);
+  };
 
   // Handle URL query parameters (e.g. /profile?tab=reports or /profile?tab=settings)
   React.useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tab = params.get('tab');
-    if (tab === 'reports' || tab === 'saved' || tab === 'badges') {
+    if (tab === 'reports' || tab === 'saved') {
       setActiveTab(tab);
+    }
+    if (tab === 'badges') {
+      navigate('/badges-certificates', { replace: true });
     }
     if (tab === 'settings') {
       setShowSettingsModal(true);
@@ -104,14 +123,7 @@ export const ProfileScreen: React.FC = () => {
       <div className="bg-white rounded-3xl p-5 border border-[#cbd5e1] shadow-xs space-y-4">
         <div className="flex items-start gap-4">
           <div className="relative">
-            <img
-              src="/profile_3d_avatar.jpg"
-              alt={user.name}
-              className="w-16 h-16 rounded-3xl object-cover border-2 border-white shadow-md"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = user.avatar;
-              }}
-            />
+            <Avatar src={user.avatar} name={user.name} size={64} className="border-2 border-white shadow-md" />
             <div className="absolute -bottom-1 -right-1 bg-[#0f2d59] rounded-full p-1 text-white shadow-xs">
               <ShieldCheck className="w-4 h-4" />
             </div>
@@ -192,7 +204,7 @@ export const ProfileScreen: React.FC = () => {
         <ChevronRight className="w-5 h-5 text-white/80" />
       </div>
 
-      {/* Profile Tabs: My Reports | Bookmarks | Badges */}
+      {/* Profile Tabs: My Reports | Bookmarks (badges live on the Badges & Certificates page) */}
       <div className="space-y-3">
         <div className="flex items-center p-1 bg-white rounded-2xl border border-[#cbd5e1]">
           <button
@@ -214,16 +226,6 @@ export const ProfileScreen: React.FC = () => {
             }`}
           >
             Bookmarks ({bookmarkedPosts.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('badges')}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'badges'
-                ? 'bg-[#0f2d59] text-white shadow-xs'
-                : 'text-[#64748b] hover:text-[#0f172a]'
-            }`}
-          >
-            Badges
           </button>
         </div>
 
@@ -292,83 +294,6 @@ export const ProfileScreen: React.FC = () => {
             )}
           </div>
         )}
-
-        {/* Tab 3: Badges & Level Milestone Showcase */}
-        {activeTab === 'badges' && (
-          <div className="space-y-3">
-            {/* Current Tier Medal Box */}
-            <div className="bg-[#FEFBF0] rounded-3xl p-4 border border-[#F6E6B8] flex items-center justify-between gap-3 shadow-xs">
-              <div className="flex items-center gap-3">
-                <CivicLevelIcon levelId="gold" size={56} />
-                <div>
-                  <span className="text-[10px] font-bold text-[#D69E2E] uppercase tracking-wider block">
-                    Current Civic Tier
-                  </span>
-                  <h4 className="text-sm font-extrabold text-[#0f172a]">
-                    {user.level} Citizen
-                  </h4>
-                  <span className="text-[11px] text-[#64748b]">
-                    {user.points} points · 300 – 749 milestone
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() => navigate('/badges-certificates')}
-                className="text-xs font-bold text-[#0f2d59] bg-white px-3 py-1.5 rounded-xl border border-[#cbd5e1] hover:bg-[#eff6ff] shadow-2xs"
-              >
-                All Milestones &rarr;
-              </button>
-            </div>
-
-            {/* Badges Grid */}
-            <div className="bg-white rounded-3xl p-4 border border-[#cbd5e1] space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#0f172a]">
-                  Civic Achievement Badges
-                </span>
-                <button
-                  onClick={() => navigate('/badges-certificates')}
-                  className="text-xs font-bold text-[#0f2d59] hover:underline"
-                >
-                  View certificates &rarr;
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                {badges.map((badge) => (
-                  <div
-                    key={badge.id}
-                    onClick={() => navigate('/badges-certificates')}
-                    className={`p-3 rounded-2xl border text-center flex flex-col items-center cursor-pointer transition-all ${
-                      badge.isUnlocked
-                        ? 'bg-white border-[#cbd5e1] hover:border-[#0f2d59]/40 shadow-2xs'
-                        : 'bg-[#f8fafc] border-[#cbd5e1] opacity-75'
-                    }`}
-                  >
-                    <CivicBadgeIcon badgeId={badge.id} size={48} />
-                    <span className="text-xs font-bold text-[#0f172a] mt-1.5 leading-tight">
-                      {badge.name}
-                    </span>
-                    <span className="text-[10px] text-[#64748b] mt-0.5 line-clamp-1">
-                      {badge.requirement}
-                    </span>
-                    <div className="mt-1.5">
-                      {badge.isUnlocked ? (
-                        <span className="text-[9px] font-bold text-[#0f2d59] bg-[#eff6ff] px-2 py-0.5 rounded-md">
-                          Unlocked
-                        </span>
-                      ) : (
-                        <span className="text-[9px] font-semibold text-[#64748b]">
-                          {badge.progress}% done
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Edit Profile Modal */}
@@ -391,6 +316,40 @@ export const ProfileScreen: React.FC = () => {
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-[#0f172a] block mb-1.5">Profile Picture</label>
+              <div className="flex flex-wrap items-center gap-2" aria-busy={savingAvatar}>
+                <button
+                  type="button"
+                  disabled={savingAvatar}
+                  onClick={() => pickAvatar('')}
+                  title="Initials"
+                  className={`rounded-full p-0.5 border-2 cursor-pointer ${user.avatar === '' ? 'border-[#0f2d59]' : 'border-transparent'}`}
+                >
+                  <Avatar src="" name={user.name} size={36} />
+                </button>
+                {AVATAR_PRESETS.map((a) => (
+                  <button
+                    key={a.key}
+                    type="button"
+                    disabled={savingAvatar}
+                    onClick={() => pickAvatar(`preset:${a.key}`)}
+                    title={a.label}
+                    aria-label={a.label}
+                    className={`rounded-full p-0.5 border-2 cursor-pointer ${
+                      user.avatar === `preset:${a.key}` ? 'border-[#0f2d59]' : 'border-transparent'
+                    }`}
+                  >
+                    <Avatar src={`preset:${a.key}`} name={a.label} size={36} />
+                  </button>
+                ))}
+              </div>
+              <label className="inline-block mt-2 text-[11px] font-bold text-[#0f2d59] hover:underline cursor-pointer">
+                Upload your own photo
+                <input type="file" accept="image/*" className="hidden" aria-label="Upload profile photo" onChange={onPhotoFile} />
+              </label>
             </div>
 
             <form onSubmit={handleSaveProfile} className="space-y-3">
@@ -453,70 +412,6 @@ export const ProfileScreen: React.FC = () => {
         </div>
       )}
 
-      {/* Theme & Appearance Settings Card */}
-      <div className="bg-white dark:bg-[#131c2e] rounded-3xl p-4 sm:p-5 border border-[#cbd5e1] dark:border-slate-800 shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#eff6ff] dark:bg-blue-950/60 text-[#0f2d59] dark:text-blue-300 flex items-center justify-center">
-              {theme === 'dark' ? <Moon className="w-4 h-4 text-amber-400" /> : <Sun className="w-4 h-4 text-amber-500" />}
-            </div>
-            <div>
-              <h3 className="text-xs font-black text-[#0f172a] dark:text-white uppercase tracking-wider">
-                Theme & Appearance
-              </h3>
-              <p className="text-[11px] text-[#64748b] dark:text-slate-400">
-                Current mode: <strong className="text-[#0f2d59] dark:text-amber-300">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</strong>
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setShowSettingsModal(true)}
-            className="text-xs font-bold text-[#0f2d59] dark:text-blue-400 flex items-center gap-1 hover:underline cursor-pointer"
-          >
-            <span>Preferences</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Dual Theme Selector Buttons */}
-        <div className="grid grid-cols-2 gap-2 pt-1">
-          <button
-            type="button"
-            onClick={() => {
-              setTheme('light');
-              addToast('Light Mode Activated', 'Daylight civic theme enabled.', 'info');
-            }}
-            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-2xl text-xs font-bold border transition-all cursor-pointer ${
-              theme === 'light'
-                ? 'bg-[#eff6ff] text-[#0f2d59] border-[#0f2d59] shadow-xs ring-2 ring-[#0f2d59]/20 font-extrabold'
-                : 'bg-[#f8fafc] dark:bg-[#1e293b] text-slate-600 dark:text-slate-300 border-[#cbd5e1] dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Sun className="w-4 h-4 text-amber-500" />
-            <span>Light Mode</span>
-            {theme === 'light' && <Check className="w-3.5 h-3.5 text-[#0f2d59]" />}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setTheme('dark');
-              addToast('Dark Mode Activated', 'High-contrast midnight theme enabled.', 'info');
-            }}
-            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-2xl text-xs font-bold border transition-all cursor-pointer ${
-              theme === 'dark'
-                ? 'bg-slate-900 text-amber-300 border-amber-400 shadow-xs ring-2 ring-amber-400/20 font-extrabold'
-                : 'bg-[#f8fafc] dark:bg-[#1e293b] text-slate-600 dark:text-slate-300 border-[#cbd5e1] dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Moon className="w-4 h-4 text-amber-400" />
-            <span>Dark Mode</span>
-            {theme === 'dark' && <Check className="w-3.5 h-3.5 text-amber-400" />}
-          </button>
-        </div>
-      </div>
-
       {/* Settings Modal */}
       {showSettingsModal && (
         <div
@@ -540,57 +435,6 @@ export const ProfileScreen: React.FC = () => {
             </div>
 
             <div className="space-y-3 text-xs">
-              {/* THEME SELECTION: Light vs Dark Mode */}
-              <div className="p-3 bg-[#f8fafc] dark:bg-[#1e293b] rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-[#0f172a] dark:text-white block">
-                      Theme Appearance
-                    </span>
-                    <span className="text-[10px] text-[#64748b] dark:text-slate-400">
-                      Choose between Light and Dark interface
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200">
-                    {theme === 'dark' ? '🌙 Dark' : '☀️ Light'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTheme('light');
-                      addToast('Light Mode Activated', 'Interface updated to daylight theme.', 'info');
-                    }}
-                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                      theme === 'light'
-                        ? 'bg-white text-[#0f2d59] border-[#0f2d59] shadow-sm ring-2 ring-[#0f2d59]/20 font-extrabold'
-                        : 'bg-transparent text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:bg-white/50 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <Sun className="w-3.5 h-3.5 text-amber-500" />
-                    <span>Light Mode</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTheme('dark');
-                      addToast('Dark Mode Activated', 'Interface updated to midnight theme.', 'info');
-                    }}
-                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                      theme === 'dark'
-                        ? 'bg-slate-900 text-amber-300 border-amber-400 shadow-sm ring-2 ring-amber-400/20 font-extrabold'
-                        : 'bg-transparent text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <Moon className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Dark Mode</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Ward Dispatch Alerts */}
               <div className="flex items-center justify-between p-2.5 bg-[#f8fafc] dark:bg-[#1e293b] rounded-xl border border-slate-200 dark:border-slate-700/60">
                 <div>

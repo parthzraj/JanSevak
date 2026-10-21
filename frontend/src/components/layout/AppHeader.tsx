@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Menu, Bell, Trophy, ShieldCheck, Search, Sun, Moon } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { Avatar } from '../common/Avatar';
 
 export const AppHeader: React.FC = () => {
   const navigate = useNavigate();
@@ -132,14 +133,7 @@ export const AppHeader: React.FC = () => {
             title={`View profile for ${user.name}`}
             aria-label="View Profile"
           >
-            <img
-              src="/profile_3d_avatar.jpg"
-              alt={user.name}
-              className="w-7 h-7 rounded-full object-cover border border-white"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = user.avatar;
-              }}
-            />
+            <Avatar src={user.avatar} name={user.name} size={28} className="border border-white" />
             <div className="absolute -bottom-0.5 -right-0.5 bg-[#0f2d59] rounded-full p-0.5 text-white">
               <ShieldCheck className="w-2.5 h-2.5 text-emerald-400" />
             </div>

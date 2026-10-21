@@ -114,9 +114,38 @@ class IssueResponse(BaseModel):
     updated_at: datetime
 
 
+class EvidenceItem(BaseModel):
+    id: int
+    url: str
+    user_id: int
+    author: str
+    created_at: datetime
+
+
+class EvidenceAddedResponse(BaseModel):
+    evidence: list[EvidenceItem]
+    points_awarded: int
+    user_points: int
+    user_tier: str
+
+
+class SupporterItem(BaseModel):
+    user_id: int
+    name: str
+    avatar_url: str | None = None
+    ward: str | None = None
+    supported_at: datetime
+
+
+class SupportersResponse(BaseModel):
+    total: int
+    items: list[SupporterItem]
+
+
 class IssueDetailResponse(IssueResponse):
     comments: list[CommentResponse] = []
     timeline: list[TimelineEntry] = []
+    evidence: list[EvidenceItem] = []
 
 
 class IssueListResponse(BaseModel):

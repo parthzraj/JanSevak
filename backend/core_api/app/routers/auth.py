@@ -76,7 +76,9 @@ def me(user: User = Depends(get_current_user)):
 @router.patch("/me", response_model=UserResponse)
 def update_me(body: UserUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     for field, value in body.model_dump(exclude_unset=True).items():
-        if value is not None:
+        if field == "avatar_url":
+            user.avatar_url = value or None  # "" resets to the initials avatar
+        elif value is not None:
             setattr(user, field, value.strip() if isinstance(value, str) else value)
     db.commit()
     db.refresh(user)

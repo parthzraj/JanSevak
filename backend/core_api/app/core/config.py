@@ -23,6 +23,10 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "*"  # comma separated list, or "*"
 
+    # Report quality: photo + real description + location required, near-duplicates rejected.
+    STRICT_REPORT_RULES: bool = True
+    MAX_REPORTS_PER_DAY: int = 10  # per user per calendar day, 0 = unlimited
+
     DAILY_POINTS_CAP: int = 60
     DAY_RESET_TZ: str = "Asia/Kolkata"
 

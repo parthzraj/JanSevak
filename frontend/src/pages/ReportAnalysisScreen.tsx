@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3,
@@ -12,10 +12,41 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { fetchAnalytics, type BackendStats } from '../lib/api';
+
+const CATEGORY_COLOURS: Record<string, string> = {
+  Roads: 'bg-amber-500',
+  Sanitation: 'bg-emerald-500',
+  Water: 'bg-blue-500',
+  Streetlights: 'bg-yellow-500',
+  'Public Safety': 'bg-red-500',
+  Parks: 'bg-teal-500',
+  Community: 'bg-indigo-500',
+};
+
+const formatHours = (h: number | null): string => {
+  if (h === null) return 'No resolved issues yet';
+  if (h < 1) return `${Math.max(1, Math.round(h * 60))} minutes`;
+  if (h < 48) return `${h.toFixed(h < 10 ? 1 : 0)} hours`;
+  return `${(h / 24).toFixed(1)} days`;
+};
 
 export const ReportAnalysisScreen: React.FC = () => {
   const navigate = useNavigate();
   const { posts, user, setSelectedPostForDetail } = useApp();
+
+  const [stats, setStats] = useState<{ mine: BackendStats; community: BackendStats } | null>(null);
+  const [statsError, setStatsError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAnalytics()
+      .then((res) => !cancelled && setStats(res))
+      .catch(() => !cancelled && setStatsError(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [posts.length, user.id]);
 
   const [statusFilter, setStatusFilter] = useState<'All' | 'Reported' | 'In Progress' | 'Resolved'>('All');
 
@@ -33,13 +64,8 @@ export const ReportAnalysisScreen: React.FC = () => {
   const inProgressCount = myReports.filter((p) => p.status === 'In Progress' || p.status === 'Under Review').length;
   const resolvedCount = myReports.filter((p) => p.status === 'Resolved').length;
 
-  const categoryStats = [
-    { name: 'Roads', count: 7, pct: 38, color: 'bg-amber-500' },
-    { name: 'Sanitation', count: 5, pct: 28, color: 'bg-emerald-500' },
-    { name: 'Water', count: 3, pct: 17, color: 'bg-blue-500' },
-    { name: 'Streetlights', count: 2, pct: 11, color: 'bg-yellow-500' },
-    { name: 'Parks', count: 1, pct: 6, color: 'bg-teal-500' },
-  ];
+  const mine = stats?.mine;
+  const community = stats?.community;
 
   return (
     <div className="flex-1 flex flex-col px-3.5 sm:px-4 pt-3 pb-8 space-y-4">
@@ -53,7 +79,7 @@ export const ReportAnalysisScreen: React.FC = () => {
           <span>Back to Menu</span>
         </button>
         <span className="text-xs text-[#64748b] font-medium">
-          Ward 112 Analytics
+          Live data from the community
         </span>
       </div>
 
@@ -80,7 +106,7 @@ export const ReportAnalysisScreen: React.FC = () => {
             Logged
           </span>
           <span className="text-xl font-extrabold text-[#0f172a] tabular-nums mt-0.5 block">
-            {myReports.length}
+            {mine?.total ?? myReports.length}
           </span>
           <span className="text-[10px] text-[#64748b]">total issues</span>
         </div>
@@ -90,7 +116,7 @@ export const ReportAnalysisScreen: React.FC = () => {
             In Action
           </span>
           <span className="text-xl font-extrabold text-amber-700 tabular-nums mt-0.5 block">
-            {inProgressCount}
+            {mine?.in_progress ?? inProgressCount}
           </span>
           <span className="text-[10px] text-[#64748b]">under repair</span>
         </div>
@@ -100,9 +126,9 @@ export const ReportAnalysisScreen: React.FC = () => {
             Resolved
           </span>
           <span className="text-xl font-extrabold text-[#0f2d59] tabular-nums mt-0.5 block">
-            {resolvedCount}
+            {mine?.resolved ?? resolvedCount}
           </span>
-          <span className="text-[10px] text-[#1d4e8c]">78% rate</span>
+          <span className="text-[10px] text-[#1d4e8c]">{mine ? `${mine.resolution_rate}% rate` : '—'}</span>
         </div>
       </div>
 
@@ -113,32 +139,52 @@ export const ReportAnalysisScreen: React.FC = () => {
             <TrendingUp className="w-3.5 h-3.5 text-[#0f2d59]" />
             Your Reports by Category
           </span>
-          <span className="text-[11px] text-[#64748b]">18 total</span>
+          <span className="text-[11px] text-[#64748b]">{mine ? `${mine.total} total` : ""}</span>
         </div>
 
         <div className="space-y-2.5">
-          {categoryStats.map((item) => (
-            <div key={item.name} className="space-y-1">
+          {statsError && (
+            <p className="text-[11px] text-[#64748b]">Could not load live statistics. Is the backend running?</p>
+          )}
+          {mine && mine.by_category.length === 0 && (
+            <p className="text-[11px] text-[#64748b]">You have not reported anything yet. Your categories will show up here.</p>
+          )}
+          {(mine?.by_category ?? []).map((item) => (
+            <div key={item.category} className="space-y-1">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-[#0f172a]">{item.name}</span>
+                <span className="font-semibold text-[#0f172a]">{item.category}</span>
                 <span className="text-[#64748b] tabular-nums text-[11px]">
-                  {item.count} ({item.pct}%)
+                  {item.count} ({item.percent}%)
                 </span>
               </div>
               <div className="h-2 bg-[#f8fafc] rounded-full overflow-hidden border border-[#cbd5e1]">
                 <div
-                  className={`h-full rounded-full ${item.color}`}
-                  style={{ width: `${item.pct}%` }}
+                  className={`h-full rounded-full ${CATEGORY_COLOURS[item.category] ?? 'bg-slate-500'}`}
+                  style={{ width: `${item.percent}%` }}
                 />
               </div>
             </div>
           ))}
         </div>
 
-        {/* Resolution Benchmark */}
-        <div className="mt-2 pt-3 border-t border-[#cbd5e1] flex items-center justify-between text-[11px] text-[#64748b]">
-          <span>Ward Average Resolution Time:</span>
-          <span className="font-bold text-[#0f2d59]">38 Hours</span>
+        {/* Community benchmark (all citizens, computed live) */}
+        <div className="mt-2 pt-3 border-t border-[#cbd5e1] space-y-1.5 text-[11px] text-[#64748b]">
+          <div className="flex items-center justify-between">
+            <span>Community reports (all time):</span>
+            <span className="font-bold text-[#0f2d59]">{community ? community.total : '—'}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Community resolution rate:</span>
+            <span className="font-bold text-[#0f2d59]">{community ? `${community.resolution_rate}%` : '—'}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>New reports in the last 7 days:</span>
+            <span className="font-bold text-[#0f2d59]">{community ? community.last_7_days : '—'}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span>Average time to resolve:</span>
+            <span className="font-bold text-[#0f2d59]">{community ? formatHours(community.avg_resolution_hours) : '—'}</span>
+          </div>
         </div>
       </div>
 

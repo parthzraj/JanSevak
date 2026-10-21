@@ -16,6 +16,7 @@ import { BadgesCertificatesScreen } from './pages/BadgesCertificatesScreen';
 import { NotificationsScreen } from './pages/NotificationsScreen';
 import { RewardsScreen } from './pages/RewardsScreen';
 import { ProfileScreen } from './pages/ProfileScreen';
+import { PublicProfileScreen } from './pages/PublicProfileScreen';
 import { PredictiveAlertsScreen } from './pages/PredictiveAlertsScreen';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -164,6 +165,14 @@ const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute>
               <ProfileScreen />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/user/:id"
+          element={
+            <ProtectedRoute>
+              <PublicProfileScreen />
             </ProtectedRoute>
           }
         />

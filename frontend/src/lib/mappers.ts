@@ -1,8 +1,17 @@
 /** Converts Core API (snake_case) objects into the shapes the UI already uses. */
 import type { CivicCategory, CivicPost, IssuePriority, IssueStatus, UserNotification, UserProfile } from '../types';
-import { assetUrl, type BackendComment, type BackendIssue, type BackendNotification, type BackendUser } from './api';
+import {
+  assetUrl,
+  type BackendComment,
+  type BackendIssue,
+  type BackendNotification,
+  type BackendSupporter,
+  type BackendUser,
+} from './api';
 
-const DEFAULT_AVATAR = '/profile_3d_avatar.jpg';
+/** "preset:man-1" stays as is (drawn by <Avatar>), uploads become full URLs, nothing -> '' (coloured initials). */
+export const avatarFrom = (url: string | null | undefined): string =>
+  !url ? '' : url.startsWith('preset:') ? url : assetUrl(url);
 
 export const CATEGORY_VISUALS: Record<CivicCategory, { url: string; grad: string }> = {
   Roads: {
@@ -39,6 +48,7 @@ export const CATEGORY_VISUALS: Record<CivicCategory, { url: string; grad: string
 export const nextLevelPoints = (points: number): number => [100, 300, 750, 2000].find((t) => points < t) ?? 2000;
 
 export function timeAgo(iso: string): string {
+  if (Number.isNaN(new Date(iso).getTime())) return '';
   const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
   if (seconds < 60) return 'Just now';
   const minutes = Math.floor(seconds / 60);
@@ -69,7 +79,7 @@ export function toUserProfile(u: BackendUser, prev?: UserProfile): UserProfile {
     id: String(u.id),
     name: u.name,
     email: u.email,
-    avatar: u.avatar_url ? assetUrl(u.avatar_url) : DEFAULT_AVATAR,
+    avatar: avatarFrom(u.avatar_url),
     neighborhood,
     wardNumber,
     points: u.points,
@@ -91,7 +101,8 @@ export function toComment(c: BackendComment) {
   return {
     id: String(c.id),
     author: c.author,
-    avatar: c.avatar_url ? assetUrl(c.avatar_url) : DEFAULT_AVATAR,
+    avatar: avatarFrom(c.avatar_url),
+    userId: String(c.user_id),
     text: c.text,
     time: timeAgo(c.created_at),
     isOfficial: c.is_official,
@@ -107,7 +118,7 @@ export function toCivicPost(i: BackendIssue): CivicPost {
     reporter: {
       id: String(i.reporter.id),
       name: i.reporter.name,
-      avatar: i.reporter.avatar_url ? assetUrl(i.reporter.avatar_url) : DEFAULT_AVATAR,
+      avatar: avatarFrom(i.reporter.avatar_url),
       isVerified: true,
       wardOrArea: i.address || i.reporter.ward || 'Bengaluru',
     },
@@ -119,7 +130,9 @@ export function toCivicPost(i: BackendIssue): CivicPost {
     status: i.status as IssueStatus,
     priority: i.priority_ui as IssuePriority,
     imageUrl: images[0] ?? visuals.url,
-    images: images.length > 0 ? images : undefined,
+    images, // [] when the reporter attached no photos (the hero then shows an illustrative image)
+    latitude: i.latitude ?? undefined,
+    longitude: i.longitude ?? undefined,
     imageFallbackGradient: visuals.grad,
     upvotes: i.upvotes,
     hasUpvoted: i.has_upvoted,
@@ -147,5 +160,15 @@ export function toNotification(n: BackendNotification): UserNotification {
     timestamp: timeAgo(n.created_at),
     isRead: n.is_read,
     group: ageHours < 24 ? 'Today' : 'Earlier',
+  };
+}
+
+export function toSupporter(s: BackendSupporter) {
+  return {
+    id: String(s.user_id),
+    name: s.name,
+    avatar: avatarFrom(s.avatar_url), // '' -> the UI shows the person's initials
+    ward: s.ward ?? undefined,
+    time: timeAgo(s.supported_at),
   };
 }
