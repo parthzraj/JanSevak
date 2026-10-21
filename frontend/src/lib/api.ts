@@ -693,6 +693,18 @@ export async function prepareWithImage(imageFile: File, issue?: string, location
   return response.json();
 }
 
+// ---------------------------------------------------------------------------
+// Feed Prioritization (AI)
+// ---------------------------------------------------------------------------
+export async function prioritizeFeed(
+  complaints: Array<{ id: string; title: string; description?: string; category?: string }>
+): Promise<{ ranked_ids: string[] }> {
+  return aiRequest<{ ranked_ids: string[] }>('/api/feed/prioritize', {
+    method: 'POST',
+    body: JSON.stringify({ complaints }),
+  });
+}
+
 export default {
   getToken,
   setToken,
@@ -701,4 +713,6 @@ export default {
   checkStreetRisk,
   verifyPhoto,
   prepareWithImage,
+  prioritizeFeed,
 };
+

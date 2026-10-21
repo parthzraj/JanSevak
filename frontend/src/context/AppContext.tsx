@@ -137,6 +137,9 @@ interface AppContextType {
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   toggleTheme: () => void;
+  isBriefingAcknowledged: boolean;
+  acknowledgeBriefing: () => void;
+  resetBriefingAcknowledgment: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -191,42 +194,92 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return INITIAL_USER;
   });
 
-  // Posts State
+  // Posts State (safe parse)
   const [posts, setPosts] = useState<CivicPost[]>(() => {
-    const saved = localStorage.getItem('prajapulse_posts');
-    return saved ? JSON.parse(saved) : INITIAL_POSTS;
+    try {
+      const saved = localStorage.getItem('prajapulse_posts');
+      return saved ? JSON.parse(saved) : INITIAL_POSTS;
+    } catch {
+      return INITIAL_POSTS;
+    }
   });
 
   // Briefing
   const [briefing] = useState<DailyBriefing>(INITIAL_BRIEFING);
 
-  // Reels
-  const [reels, setReels] = useState<ReelStory[]>(() => {
-    const saved = localStorage.getItem('prajapulse_reels');
-    return saved ? JSON.parse(saved) : INITIAL_REELS;
+  // Daily Briefing Acknowledged State (per day)
+  const getTodayBriefingKey = () => {
+    const today = new Date();
+    return `praja_briefing_ack_${today.getFullYear()}_${today.getMonth() + 1}_${today.getDate()}`;
+  };
+
+  const [isBriefingAcknowledged, setIsBriefingAcknowledged] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(getTodayBriefingKey()) === 'true';
+    } catch {
+      return false;
+    }
   });
 
-  // Notifications
+  const acknowledgeBriefing = useCallback(() => {
+    try {
+      localStorage.setItem(getTodayBriefingKey(), 'true');
+    } catch {}
+    setIsBriefingAcknowledged(true);
+  }, []);
+
+  const resetBriefingAcknowledgment = useCallback(() => {
+    try {
+      localStorage.removeItem(getTodayBriefingKey());
+    } catch {}
+    setIsBriefingAcknowledged(false);
+  }, []);
+
+  // Reels (safe parse)
+  const [reels, setReels] = useState<ReelStory[]>(() => {
+    try {
+      const saved = localStorage.getItem('prajapulse_reels');
+      return saved ? JSON.parse(saved) : INITIAL_REELS;
+    } catch {
+      return INITIAL_REELS;
+    }
+  });
+
+  // Notifications (safe parse)
   const [notifications, setNotifications] = useState<UserNotification[]>(() => {
-    const saved = localStorage.getItem('prajapulse_notifications');
-    return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+    try {
+      const saved = localStorage.getItem('prajapulse_notifications');
+      return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+    } catch {
+      return INITIAL_NOTIFICATIONS;
+    }
   });
 
   // Vacancies
   const [vacancies] = useState<Vacancy[]>(INITIAL_VACANCIES);
   const [appliedVacancies, setAppliedVacancies] = useState<string[]>(() => {
-    const saved = localStorage.getItem('prajapulse_applied_vacancies');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('prajapulse_applied_vacancies');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   // NGO Volunteer Drives (Dataset integrated)
   const [volunteerDrives, setVolunteerDrives] = useState<VolunteerDrive[]>(() => {
-    const saved = localStorage.getItem('prajapulse_volunteer_drives');
-    return saved ? JSON.parse(saved) : INITIAL_VOLUNTEER_DRIVES;
+    try {
+      const saved = localStorage.getItem('prajapulse_volunteer_drives');
+      return saved ? JSON.parse(saved) : INITIAL_VOLUNTEER_DRIVES;
+    } catch {
+      return INITIAL_VOLUNTEER_DRIVES;
+    }
   });
 
   useEffect(() => {
-    localStorage.setItem('prajapulse_volunteer_drives', JSON.stringify(volunteerDrives));
+    try {
+      localStorage.setItem('prajapulse_volunteer_drives', JSON.stringify(volunteerDrives));
+    } catch {}
   }, [volunteerDrives]);
 
   // Badges (7 badges matching user design specification)
@@ -245,10 +298,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return INITIAL_BADGES;
   });
 
-  // Learning Modules
+  // Learning Modules (safe parse)
   const [modules, setModules] = useState<LearnModule[]>(() => {
-    const saved = localStorage.getItem('prajapulse_modules');
-    return saved ? JSON.parse(saved) : INITIAL_MODULES;
+    try {
+      const saved = localStorage.getItem('prajapulse_modules');
+      return saved ? JSON.parse(saved) : INITIAL_MODULES;
+    } catch {
+      return INITIAL_MODULES;
+    }
   });
 
   // Toasts
@@ -954,6 +1011,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         theme,
         setTheme,
         toggleTheme,
+        isBriefingAcknowledged,
+        acknowledgeBriefing,
+        resetBriefingAcknowledgment,
       }}
     >
       {children}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Star,
   ArrowRight,
@@ -13,23 +13,354 @@ import {
   Trophy,
   ChevronRight,
   AlertCircle,
+  Lightbulb,
+  Shield,
+  Users,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { prioritizeFeed } from '../../lib/api';
+import { CivicPost } from '../../types';
+
+export const getCategoryIcon = (category: string) => {
+  switch (category) {
+    case 'Water':
+      return <Droplets className="w-3.5 h-3.5 text-blue-600" />;
+    case 'Roads':
+      return <Truck className="w-3.5 h-3.5 text-amber-600" />;
+    case 'Sanitation':
+      return <Leaf className="w-3.5 h-3.5 text-emerald-600" />;
+    case 'Streetlights':
+      return <Lightbulb className="w-3.5 h-3.5 text-yellow-600" />;
+    case 'Public Safety':
+      return <Shield className="w-3.5 h-3.5 text-red-600" />;
+    case 'Community':
+      return <Users className="w-3.5 h-3.5 text-indigo-600" />;
+    default:
+      return <Sparkles className="w-3.5 h-3.5 text-[#0f2d59]" />;
+  }
+};
+
+/**
+ * Hook to rank active civic posts by urgency using the backend AI service (/api/feed/prioritize).
+ * Returns the top 3 highest priority redressal issues of the day.
+ */
+export function useCityBriefingAi(posts: CivicPost[]) {
+  const [top3Issues, setTop3Issues] = useState<CivicPost[]>([]);
+  const [isLoadingAi, setIsLoadingAi] = useState<boolean>(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const rankFeedWithAi = async () => {
+      if (!posts || posts.length === 0) {
+        setIsLoadingAi(false);
+        return;
+      }
+
+      setIsLoadingAi(true);
+
+      const getFallbackSorted = () => {
+        const priorityScore: Record<string, number> = {
+          Urgent: 4,
+          Critical: 4,
+          High: 3,
+          Medium: 2,
+          Low: 1,
+        };
+        return [...posts].sort((a, b) => {
+          const pA = priorityScore[a.priority || 'Medium'] || 2;
+          const pB = priorityScore[b.priority || 'Medium'] || 2;
+          if (pA !== pB) return pB - pA;
+          return (b.upvotes || 0) - (a.upvotes || 0);
+        });
+      };
+
+      try {
+        const complaints = posts.slice(0, 20).map((p) => ({
+          id: String(p.id),
+          title: p.title,
+          description: p.description?.substring(0, 100) || '',
+          category: p.category,
+        }));
+
+        const result = await prioritizeFeed(complaints);
+        if (!cancelled && result?.ranked_ids && result.ranked_ids.length > 0) {
+          const idOrder = new Map(result.ranked_ids.map((id, idx) => [id, idx]));
+          const sorted = [...posts].sort((a, b) => {
+            const orderA = idOrder.get(String(a.id)) ?? 999;
+            const orderB = idOrder.get(String(b.id)) ?? 999;
+            return (orderA as number) - (orderB as number);
+          });
+          setTop3Issues(sorted.slice(0, 3));
+        } else if (!cancelled) {
+          setTop3Issues(getFallbackSorted().slice(0, 3));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setTop3Issues(getFallbackSorted().slice(0, 3));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingAi(false);
+        }
+      }
+    };
+
+    rankFeedWithAi();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [posts]);
+
+  return { top3Issues, isLoadingAi };
+}
+
+export interface CityBriefingModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  showAcknowledgeButton?: boolean;
+}
+
+/**
+ * Reusable Full 7:00 AM City Briefing Modal.
+ * Displays AI-prioritized Top 3 problems of the feed under "Priority Redressal of the Day".
+ */
+export const CityBriefingModal: React.FC<CityBriefingModalProps> = ({
+  isOpen,
+  onClose,
+  showAcknowledgeButton = true,
+}) => {
+  const { briefing, posts, setSelectedPostForDetail, acknowledgeBriefing, isBriefingAcknowledged } = useApp();
+  const { top3Issues, isLoadingAi } = useCityBriefingAi(posts);
+
+  if (!isOpen) return null;
+
+  const handleAcknowledge = () => {
+    acknowledgeBriefing();
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col pb-safe"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className="bg-[#0f2d59] text-white p-4 flex items-center justify-between shrink-0 border-b border-blue-900/50">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center border border-amber-400/40">
+              <Sunrise className="w-4 h-4 text-amber-300" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-sm leading-tight">Your 7 AM City Briefing</h3>
+              <p className="text-[11px] text-blue-200">BBMP Ward 112 • Official Civic Intelligence</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs text-[#0f172a]">
+          {/* Headline & Summary */}
+          <div className="bg-[#eff6ff] border border-blue-200 rounded-2xl p-3.5 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-[#0f2d59] font-extrabold text-xs">
+              <Calendar className="w-3.5 h-3.5 text-[#ea580c]" />
+              <span>07:00 AM Municipal Intelligence Dispatch</span>
+            </div>
+            <h4 className="font-extrabold text-sm text-[#0f172a] leading-snug">
+              {top3Issues[0]
+                ? `Priority Redressal Focus: ${top3Issues[0].title}`
+                : briefing.headline}
+            </h4>
+            <p className="text-xs text-[#334155] leading-relaxed">
+              {top3Issues.length > 0
+                ? `AI has analyzed active civic reports and flagged ${top3Issues.length} critical issues requiring urgent redressal today. Field engineers and response units have been prioritized for immediate site remediation.`
+                : briefing.aiSummary}
+            </p>
+          </div>
+
+          {/* Priority Redressal of the Day - AI Ranked Top 3 Problems */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <h5 className="font-extrabold text-xs uppercase tracking-wider text-[#64748b]">
+                  Priority Redressal of the Day
+                </h5>
+                <span className="inline-flex items-center gap-1 text-[9.5px] bg-purple-100 text-purple-900 font-extrabold px-2 py-0.5 rounded-full border border-purple-200">
+                  <Sparkles className="w-2.5 h-2.5 text-purple-600" />
+                  AI Ranked
+                </span>
+              </div>
+              <span className="text-[10px] bg-red-100 text-red-800 font-extrabold px-2 py-0.5 rounded-full border border-red-200">
+                Top 3 Critical Issues
+              </span>
+            </div>
+
+            {isLoadingAi && top3Issues.length === 0 ? (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center space-y-2">
+                <span className="w-5 h-5 border-2 border-[#0f2d59] border-t-transparent rounded-full animate-spin inline-block" />
+                <p className="text-xs font-semibold text-[#64748b]">AI analyzing civic feed for top safety priorities...</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {top3Issues.map((issue, idx) => {
+                  const rankStyles = [
+                    {
+                      tag: '#1 Highest Urgency',
+                      badgeBg: 'bg-red-600 text-white',
+                      border: 'border-red-200',
+                      bg: 'bg-red-50/50',
+                    },
+                    {
+                      tag: '#2 Critical Safety',
+                      badgeBg: 'bg-orange-600 text-white',
+                      border: 'border-orange-200',
+                      bg: 'bg-orange-50/50',
+                    },
+                    {
+                      tag: '#3 Municipal Priority',
+                      badgeBg: 'bg-amber-600 text-white',
+                      border: 'border-amber-200',
+                      bg: 'bg-amber-50/50',
+                    },
+                  ];
+                  const rank = rankStyles[idx] || rankStyles[2];
+
+                  return (
+                    <div
+                      key={issue.id}
+                      className={`border ${rank.border} ${rank.bg} rounded-2xl p-3 shadow-xs space-y-2 transition-all hover:shadow-sm`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2">
+                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${rank.badgeBg} shrink-0 mt-0.5`}>
+                            {rank.tag}
+                          </span>
+                          <div>
+                            <p className="font-extrabold text-xs text-[#0f172a] leading-tight">
+                              {issue.title}
+                            </p>
+                            <p className="text-[11px] text-[#64748b] mt-0.5">
+                              {issue.reporter?.wardOrArea || 'Ward 112'} • {issue.upvotes || 0} citizen petitions & reports
+                            </p>
+                          </div>
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 bg-white rounded-md border border-slate-200 shrink-0 text-[#0f2d59]">
+                          {getCategoryIcon(issue.category)}
+                          <span>{issue.category}</span>
+                        </span>
+                      </div>
+
+                      {issue.description && (
+                        <p className="text-[11px] text-[#334155] line-clamp-2 leading-relaxed bg-white/80 p-2 rounded-xl border border-slate-100">
+                          {issue.description}
+                        </p>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          setSelectedPostForDetail(issue);
+                        }}
+                        className="w-full py-2 bg-[#0f2d59] text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-[#07172c] active:scale-[0.99] transition-all cursor-pointer border border-[#0f2d59] shadow-2xs"
+                      >
+                        <span>Inspect Official Docket</span>
+                        <ChevronRight size={14} className="text-amber-400" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Key Ward Operations */}
+          <div className="space-y-2">
+            <h5 className="font-extrabold text-xs uppercase tracking-wider text-[#64748b]">
+              Key Ward Operations
+            </h5>
+            <div className="space-y-2">
+              {briefing.topUpdates.map((update) => (
+                <div
+                  key={update.id}
+                  className="bg-white border border-[#cbd5e1] rounded-2xl p-2.5 flex items-start gap-2.5 shadow-xs"
+                >
+                  <div className="w-7 h-7 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 mt-0.5">
+                    {getCategoryIcon(update.category)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="font-bold text-xs text-[#0f172a] truncate">{update.title}</p>
+                      <span className="text-[10px] text-[#0f2d59] font-bold shrink-0 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                        {update.category}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#64748b] mt-0.5">{update.impact}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Positive Story */}
+          <div className="bg-[#ecfdf5] border border-emerald-300 rounded-2xl p-3 flex items-start gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-[#0b6623] shrink-0 mt-0.5" />
+            <div>
+              <p className="font-extrabold text-xs text-[#0b6623]">
+                Yesterday's Impact: {briefing.positiveStory.title}
+              </p>
+              <p className="text-[11px] text-[#15803d] mt-0.5">
+                {briefing.positiveStory.outcome} ({briefing.positiveStory.area})
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="p-3 bg-white border-t border-[#cbd5e1] flex items-center justify-between shrink-0">
+          <span className="text-[11px] text-[#64748b]">Next Dispatch: Tomorrow at 7:00 AM</span>
+          {showAcknowledgeButton && (
+            <button
+              onClick={handleAcknowledge}
+              className="px-4 py-1.5 bg-[#0f2d59] text-white rounded-xl text-xs font-bold hover:bg-[#07172c] transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{isBriefingAcknowledged ? 'Dismiss' : 'Acknowledge'}</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const DailyBriefingCard: React.FC = () => {
-  const { briefing, posts, setSelectedPostForDetail } = useApp();
-  // Default to 1 (Your 7 AM City Briefing) to match the user's screenshot exactly
+  const { briefing, posts, setSelectedPostForDetail, acknowledgeBriefing } = useApp();
+  const { top3Issues } = useCityBriefingAi(posts);
+
+  // Default to 1 (Your 7 AM City Briefing)
   const [activeDot, setActiveDot] = useState(1);
   const [showFullModal, setShowFullModal] = useState(false);
 
-  // 4 slide options for interactive dots, with Slide 1 matching the user's uploaded 7 AM City Briefing screenshot
+  // 4 slide options for interactive dots, with Slide 1 & 2 matching AI-powered city priorities
   const slides = [
     {
       badge: 'Featured',
       badgeIcon: 'star',
       titleLine1: 'Real Change',
       titleLine2: 'Starts with You',
-      subtitle: 'Report issues  •  Support causes  •  Build a better tomorrow',
+      subtitle: 'Report issues • Support causes • Build a better tomorrow',
       buttonText: 'Explore Issues',
       actionType: 'explore',
     },
@@ -38,16 +369,20 @@ export const DailyBriefingCard: React.FC = () => {
       badgeIcon: 'sunrise',
       titleLine1: 'Your 7 AM',
       titleLine2: 'City Briefing',
-      subtitle: 'Morning Ward Dispatch • Sunday, October 18, 2026 • BBMP Active',
+      subtitle: top3Issues[0]
+        ? `Top Priority: ${top3Issues[0].title} • BBMP Active`
+        : 'Morning Ward Dispatch • Official Civic Intelligence',
       buttonText: 'View Briefing',
       actionType: 'briefing',
     },
     {
-      badge: 'Priority Civic Alert',
+      badge: 'Priority Redressal (AI)',
       badgeIcon: 'alert',
-      titleLine1: 'Road Cavity Fix',
-      titleLine2: '100ft Road Sector',
-      subtitle: 'Cold mix leveling in progress  •  Caution cones placed',
+      titleLine1: top3Issues[0] ? top3Issues[0].title.slice(0, 24) : 'Road Cavity Fix',
+      titleLine2: top3Issues[0] && top3Issues[0].title.length > 24 ? top3Issues[0].title.slice(24, 48) + '...' : '',
+      subtitle: top3Issues[0]
+        ? `${top3Issues[0].reporter?.wardOrArea || 'Ward 112'} • AI Ranked #1 Priority (${top3Issues[0].upvotes || 0} petitions)`
+        : 'Cold mix leveling in progress • Caution cones placed',
       buttonText: 'Track Repair',
       actionType: 'priority',
     },
@@ -75,24 +410,11 @@ export const DailyBriefingCard: React.FC = () => {
     } else if (type === 'briefing') {
       setShowFullModal(true);
     } else if (type === 'priority') {
-      const p = posts.find((item) => item.id === briefing.priorityIssue.id) || posts[0];
+      const p = top3Issues[0] || posts.find((item) => item.id === briefing.priorityIssue.id) || posts[0];
       setSelectedPostForDetail(p);
     } else if (type === 'positive') {
       const p = posts.find((item) => item.isPositiveStory) || posts[2] || posts[0];
       setSelectedPostForDetail(p);
-    }
-  };
-
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'Water':
-        return <Droplets className="w-3.5 h-3.5 text-blue-600" />;
-      case 'Roads':
-        return <Truck className="w-3.5 h-3.5 text-amber-600" />;
-      case 'Sanitation':
-        return <Leaf className="w-3.5 h-3.5 text-emerald-600" />;
-      default:
-        return <Sparkles className="w-3.5 h-3.5 text-[#0f2d59]" />;
     }
   };
 
@@ -202,16 +524,17 @@ export const DailyBriefingCard: React.FC = () => {
                 type="button"
                 onClick={() => setActiveDot(idx)}
                 aria-label={`Slide ${idx + 1}`}
-                className={`w-1.5 h-1.5 rounded-full transition-all duration-300 cursor-pointer ${activeDot === idx
+                className={`w-1.5 h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                  activeDot === idx
                     ? 'bg-amber-400 scale-125 shadow-xs'
                     : 'bg-white/40 hover:bg-white/70'
-                  }`}
+                }`}
               />
             ))}
           </div>
         </div>
 
-        {/* Content Bottom: Headline on Left, Action Button on Right */}
+        {/* Content Bottom: Headline on Left, Action Buttons on Right */}
         <div className="relative z-10 flex items-end justify-between gap-3 mt-1.5">
           <div className="min-w-0 flex-1">
             <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight leading-snug drop-shadow-sm truncate">
@@ -222,156 +545,39 @@ export const DailyBriefingCard: React.FC = () => {
             </p>
           </div>
 
-          {/* Action Button: Official Civic Pill */}
-          <button
-            type="button"
-            onClick={() => handleAction(current.actionType)}
-            className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-[#0f2d59] font-extrabold text-xs hover:bg-[#eff6ff] active:scale-95 transition-all shadow-sm cursor-pointer border border-blue-200/60"
-          >
-            <span>{current.buttonText}</span>
-            <ArrowRight className="w-3 h-3 stroke-[2.5] text-[#ea580c]" />
-          </button>
+          {/* Action Buttons: Acknowledge & Official Civic Pill */}
+          <div className="shrink-0 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                acknowledgeBriefing();
+              }}
+              title="Acknowledge briefing and move to Menu"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white font-extrabold text-xs backdrop-blur-xs border border-white/30 transition-all cursor-pointer active:scale-95 shadow-2xs"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Acknowledge</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleAction(current.actionType)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-[#0f2d59] font-extrabold text-xs hover:bg-[#eff6ff] active:scale-95 transition-all shadow-sm cursor-pointer border border-blue-200/60"
+            >
+              <span>{current.buttonText}</span>
+              <ArrowRight className="w-3 h-3 stroke-[2.5] text-[#ea580c]" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Full 7 AM Briefing Modal */}
-      {showFullModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all animate-in fade-in"
-          onClick={() => setShowFullModal(false)}
-        >
-          <div
-            className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col pb-safe"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="bg-[#0f2d59] text-white p-4 flex items-center justify-between shrink-0 border-b border-blue-900/50">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center border border-amber-400/40">
-                  <Sunrise className="w-4 h-4 text-amber-300" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-sm leading-tight">Your 7 AM City Briefing</h3>
-                  <p className="text-[11px] text-blue-200">BBMP Ward 112 • Official Civic Intelligence</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowFullModal(false)}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs text-[#0f172a]">
-              {/* Headline & Summary */}
-              <div className="bg-[#eff6ff] border border-blue-200 rounded-2xl p-3.5 space-y-1.5">
-                <div className="flex items-center gap-1.5 text-[#0f2d59] font-extrabold text-xs">
-                  <Calendar className="w-3.5 h-3.5 text-[#ea580c]" />
-                  <span>Sunday, October 18, 2026 • 07:00 AM Municipal Dispatch</span>
-                </div>
-                <h4 className="font-extrabold text-sm text-[#0f172a] leading-snug">
-                  {briefing.headline}
-                </h4>
-                <p className="text-xs text-[#334155] leading-relaxed">
-                  {briefing.aiSummary}
-                </p>
-              </div>
-
-              {/* Priority Fix Section */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h5 className="font-extrabold text-xs uppercase tracking-wider text-[#64748b]">
-                    Priority Redressal of the Day
-                  </h5>
-                  <span className="text-[10px] bg-red-100 text-red-800 font-extrabold px-2 py-0.5 rounded-full border border-red-200">
-                    High Urgency
-                  </span>
-                </div>
-                <div className="bg-white border border-[#cbd5e1] rounded-2xl p-3 shadow-xs space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-extrabold text-xs text-[#0f172a]">
-                        {briefing.priorityIssue.title}
-                      </p>
-                      <p className="text-[11px] text-[#64748b]">
-                        {briefing.priorityIssue.area} • {briefing.priorityIssue.reportsCount} citizen petitions
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-[#334155]">
-                    BBMP Road Infrastructure Cell has assigned rapid cold-mix patching. Excavation leveled; final asphalt seal scheduled before evening commute.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setShowFullModal(false);
-                      const p = posts.find((item) => item.id === briefing.priorityIssue.id) || posts[0];
-                      setSelectedPostForDetail(p);
-                    }}
-                    className="w-full py-2 bg-[#0f2d59] text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 hover:bg-[#07172c] transition-colors cursor-pointer border border-[#0f2d59]"
-                  >
-                    <span>View Official Inspection Docket</span>
-                    <ChevronRight size={14} className="text-amber-400" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Top Ward Updates */}
-              <div className="space-y-2">
-                <h5 className="font-extrabold text-xs uppercase tracking-wider text-[#64748b]">
-                  Key Ward Operations
-                </h5>
-                <div className="space-y-2">
-                  {briefing.topUpdates.map((update) => (
-                    <div
-                      key={update.id}
-                      className="bg-white border border-[#cbd5e1] rounded-2xl p-2.5 flex items-start gap-2.5 shadow-xs"
-                    >
-                      <div className="w-7 h-7 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 mt-0.5">
-                        {getCategoryIcon(update.category)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <p className="font-bold text-xs text-[#0f172a] truncate">{update.title}</p>
-                          <span className="text-[10px] text-[#0f2d59] font-bold shrink-0 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                            {update.category}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-[#64748b] mt-0.5">{update.impact}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Positive Story */}
-              <div className="bg-[#ecfdf5] border border-emerald-300 rounded-2xl p-3 flex items-start gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-[#0b6623] shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-extrabold text-xs text-[#0b6623]">
-                    Yesterday's Impact: {briefing.positiveStory.title}
-                  </p>
-                  <p className="text-[11px] text-[#15803d] mt-0.5">
-                    {briefing.positiveStory.outcome} ({briefing.positiveStory.area})
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-3 bg-white border-t border-[#cbd5e1] flex items-center justify-between shrink-0">
-              <span className="text-[11px] text-[#64748b]">Next Dispatch: Tomorrow at 7:00 AM</span>
-              <button
-                onClick={() => setShowFullModal(false)}
-                className="px-4 py-1.5 bg-[#0f2d59] text-white rounded-xl text-xs font-bold hover:bg-[#07172c] transition-colors cursor-pointer"
-              >
-                Acknowledge
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CityBriefingModal
+        isOpen={showFullModal}
+        onClose={() => setShowFullModal(false)}
+        showAcknowledgeButton={true}
+      />
     </>
   );
 };

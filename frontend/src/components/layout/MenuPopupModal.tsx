@@ -8,12 +8,15 @@ import {
   ArrowUpRight,
   X,
   Compass,
+  Sunrise,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { CityBriefingModal } from '../feed/DailyBriefingCard';
 
 export const MenuPopupModal: React.FC = () => {
   const navigate = useNavigate();
-  const { isMenuPopupOpen, setIsMenuPopupOpen, badges, user } = useApp();
+  const { isMenuPopupOpen, setIsMenuPopupOpen, badges, user, isBriefingAcknowledged } = useApp();
+  const [showBriefingModal, setShowBriefingModal] = React.useState(false);
 
   const unlockedBadgesCount = badges ? badges.filter((b) => b.isUnlocked).length : 4;
 
@@ -150,6 +153,44 @@ export const MenuPopupModal: React.FC = () => {
             </div>
           </button>
         </div>
+
+        {isBriefingAcknowledged && (
+          <div className="relative overflow-hidden bg-gradient-to-r from-[#07172c] via-[#0f2d59] to-[#1e3a8a] text-white rounded-3xl p-4 shadow-sm border border-[#1d4e8c]/50">
+            <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-amber-400/15 rounded-full blur-xl pointer-events-none" />
+
+            <div className="relative z-10 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-xs flex items-center justify-center border border-amber-400/40 text-amber-300 shrink-0">
+                  <Sunrise className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 text-[9.5px] font-black uppercase tracking-wider bg-emerald-500/25 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-400/30">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      Acknowledged
+                    </span>
+                    <span className="text-[10px] text-blue-200 font-bold">07:00 AM</span>
+                  </div>
+                  <h3 className="text-sm font-extrabold text-white mt-1 leading-tight truncate">
+                    Your 7 AM City Briefing
+                  </h3>
+                  <p className="text-[11px] text-blue-100/80 mt-0.5 leading-snug line-clamp-1">
+                    Top 3 Priority Redressals of the Day
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowBriefingModal(true)}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-[#0f2d59] font-extrabold text-xs hover:bg-[#eff6ff] active:scale-95 transition-all shadow-sm cursor-pointer border border-blue-200/60"
+              >
+                <span>View</span>
+                <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.5] text-[#ea580c]" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ========================================================= */}
         {/* 2. CORE CIVIC TILES (2x2 BENTO GRID - CLEAN & ATTRACTIVE) */}
@@ -292,6 +333,12 @@ export const MenuPopupModal: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <CityBriefingModal
+        isOpen={showBriefingModal}
+        onClose={() => setShowBriefingModal(false)}
+        showAcknowledgeButton={false}
+      />
     </div>
   );
 };

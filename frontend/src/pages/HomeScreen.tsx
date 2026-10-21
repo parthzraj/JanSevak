@@ -3,9 +3,10 @@ import { ShieldAlert } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { DailyBriefingCard } from '../components/feed/DailyBriefingCard';
 import { FeedPostCard } from '../components/feed/FeedPostCard';
+import { prioritizeFeed } from '../lib/api';
 
 export const HomeScreen: React.FC = () => {
-  const { user, posts } = useApp();
+  const { user, posts, isBriefingAcknowledged } = useApp();
 
   const [criticalSort, setCriticalSort] = useState(false);
   const [sortedPosts, setSortedPosts] = useState<typeof posts | null>(null);
@@ -21,24 +22,16 @@ export const HomeScreen: React.FC = () => {
     }
     setIsSorting(true);
     try {
-      const { default: api } = await import('../lib/api');
       // Build complaint objects from posts
-      const complaints = posts.map(p => ({
+      const complaints = posts.slice(0, 20).map((p) => ({
         id: String(p.id),
         title: p.title,
         description: p.description?.substring(0, 100) || '',
         category: p.category,
       }));
-      
-      const AI_API_BASE_URL = (import.meta.env.VITE_AI_API_URL || `http://${window.location.hostname}:8001`).replace(/\/$/, '');
-      const response = await fetch(`${AI_API_BASE_URL}/api/feed/prioritize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ complaints }),
-      });
-      if (!response.ok) throw new Error('Failed');
-      const data = await response.json();
-      
+
+      const data = await prioritizeFeed(complaints);
+
       // Reorder posts based on ranked_ids
       const idOrder = new Map(data.ranked_ids.map((id: string, idx: number) => [id, idx]));
       const sorted = [...posts].sort((a, b) => {
@@ -89,8 +82,8 @@ export const HomeScreen: React.FC = () => {
         </div>
       </section>
 
-      {/* 7:00 AM City Briefing Clickable Banner */}
-      <DailyBriefingCard />
+      {/* 7:00 AM City Briefing Clickable Banner (Vanishes on Acknowledge) */}
+      {!isBriefingAcknowledged && <DailyBriefingCard />}
 
       {/* AI Critical Sort Toggle */}
       {posts.length > 1 && (
