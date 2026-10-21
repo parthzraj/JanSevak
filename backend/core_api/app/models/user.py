@@ -13,7 +13,8 @@ class User(Base):
     ward = Column(String(80), nullable=True)
     avatar_url = Column(String(255), nullable=True)
 
-    # "citizen" (default) | "official" | "admin". Only officials/admins can change issue status.
+    # "citizen" (default) | "official" | "ngo" | "admin". Only officials/admins can change issue status;
+    # only NGOs/admins can publish contests.
     role = Column(String(20), nullable=False, default="citizen", server_default="citizen")
 
     points = Column(Integer, nullable=False, default=0)  # lifetime karma points

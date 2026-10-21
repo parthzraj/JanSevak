@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -13,12 +13,9 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import {
-  CivicBadgeIcon,
-  SwachhWarriorBadgeIcon,
-  CommunityCleanerBadgeIcon,
-  VolunteerRegularBadgeIcon,
-} from '../components/common/CivicBadges';
+import { RedeemModal } from '../components/common/RedeemModal';
+import { formatRupees, redeemableSummary, MIN_WITHDRAWAL_POINTS } from '../lib/rewardsValue';
+import { CivicBadgeIcon } from '../components/common/CivicBadges';
 import {
   CivicLevelSpeedometer,
   RupeeLeafCoin,
@@ -36,7 +33,13 @@ export const BadgesCertificatesScreen: React.FC = () => {
   const navigate = useNavigate();
   const { badges, user, addToast } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'rewards' | 'certificates'>('rewards');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<'rewards' | 'certificates'>(
+    searchParams.get('tab') === 'certificates' ? 'certificates' : 'rewards'
+  );
+  const [showAllBadges, setShowAllBadges] = useState(false);
+  const [showRedeem, setShowRedeem] = useState(false);
+  const redeem = redeemableSummary(user.points);
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
   const [selectedCertificate, setSelectedCertificate] = useState<PrajaCertificateData | null>(null);
 
@@ -92,30 +95,22 @@ export const BadgesCertificatesScreen: React.FC = () => {
       {/* ============================================================ */}
       <div className="flex justify-center -mt-1 pb-1">
         <div className="bg-[#123A25] p-1 rounded-full inline-flex items-center gap-1 shadow-sm">
-          {/* Rewards Tab */}
-          <button
-            onClick={() => setActiveTab('rewards')}
-            className={`px-4 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer ${activeTab === 'rewards'
-                ? 'bg-[#247A50] text-white shadow-xs'
-                : 'text-emerald-200/70 hover:text-white'
-              }`}
-          >
-            <Award className="w-3.5 h-3.5 stroke-[2.5]" />
-            <span>rewards</span>
-          </button>
-
-          {/* Certificates Tab */}
-          <button
-            onClick={() => setActiveTab('certificates')}
-            className={`px-3.5 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer ${activeTab === 'certificates'
-                ? 'bg-[#247A50] text-white shadow-xs'
-                : 'text-emerald-200/70 hover:text-white'
-              }`}
-            title="View Certificates"
-          >
-            <FileText className="w-3.5 h-3.5 stroke-[2]" />
-            {activeTab === 'certificates' && <span>certificates</span>}
-          </button>
+          {([
+            { id: 'rewards', label: 'Rewards', Icon: Award },
+            { id: 'certificates', label: 'Certificates', Icon: FileText },
+          ] as const).map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`px-4 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer ${activeTab === id
+                  ? 'bg-[#247A50] text-white shadow-xs'
+                  : 'text-emerald-200/70 hover:text-white'
+                }`}
+            >
+              <Icon className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>{label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -125,7 +120,7 @@ export const BadgesCertificatesScreen: React.FC = () => {
       {activeTab === 'rewards' && (
         <div className="space-y-4 animate-in fade-in duration-200">
           {/* 3. HERO LEVEL PROGRESSION GAUGE (Bronze, Silver, Gold, Platinum, Legend) */}
-          <div className="bg-white dark:bg-[#111c2e] rounded-3xl p-5 sm:p-6 border border-[#cbd5e1] dark:border-slate-800 shadow-xs">
+          <div className="bg-white dark:bg-[#111c2e] rounded-3xl p-5 sm:p-6 pb-12 border border-[#cbd5e1] dark:border-slate-800 shadow-xs">
             <CivicLevelSpeedometer
               userPoints={user.points}
               userLevel={user.level}
@@ -151,23 +146,20 @@ export const BadgesCertificatesScreen: React.FC = () => {
               </span>
               <div className="flex items-baseline gap-1 mt-0.5">
                 <span className="text-2xl sm:text-3xl font-black text-white tabular-nums tracking-tight">
-                  27
+                  {redeem.points}
                 </span>
                 <span className="text-xl sm:text-2xl font-bold text-[#A7F3D0]/90 tabular-nums">
-                  / 100
+                  / {MIN_WITHDRAWAL_POINTS}
                 </span>
               </div>
+              <span className="text-[11px] font-semibold text-[#A7F3D0] block mt-0.5">
+                Worth {formatRupees(redeem.rupees)} {'\u00B7'} {redeem.meetsMinimum ? 'withdrawal unlocked' : `min ${formatRupees(100)}`}
+              </span>
             </div>
 
             {/* Right: Circular Arrow Action Button */}
             <button
-              onClick={() => {
-                addToast(
-                  'Redeemable Points',
-                  'You currently have 27 points available for municipal privileges.',
-                  'info'
-                );
-              }}
+              onClick={() => setShowRedeem(true)}
               className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white text-[#175E3B] flex items-center justify-center shrink-0 shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer"
               aria-label="Redeemable Points Info"
             >
@@ -175,70 +167,51 @@ export const BadgesCertificatesScreen: React.FC = () => {
             </button>
           </div>
 
-          {/* 5. MY BADGES (Exact Match: 3 Badges in a Row) */}
+          {/* 5. MY BADGES: first three, "View all" expands the full list in place */}
           <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between px-1">
               <h2 className="text-sm sm:text-base font-black text-[#0f172a] dark:text-white tracking-tight">
                 My Badges
+                <span className="ml-2 text-[11px] font-bold text-[#64748b] dark:text-slate-400">
+                  {badges.filter((b) => b.isUnlocked).length}/{badges.length} unlocked
+                </span>
               </h2>
-              <button
-                onClick={() => setActiveTab('certificates')}
-                className="text-xs font-bold text-[#0f2d59] dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-0.5"
-              >
-                <span>View all</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              {badges.length > 3 && (
+                <button
+                  onClick={() => setShowAllBadges((v) => !v)}
+                  className="text-xs font-bold text-[#0f2d59] dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-0.5"
+                >
+                  <span>{showAllBadges ? 'Show less' : 'View all'}</span>
+                  {!showAllBadges && <ArrowRight className="w-3.5 h-3.5" />}
+                </button>
+              )}
             </div>
 
-            {/* 3 Badges Horizontal Grid */}
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              {/* Badge 1: Swachh Warrior */}
-              <div
-                onClick={() => setSelectedBadge('badge-swachh-warrior')}
-                className="bg-[#EAF6EE] dark:bg-[#062c19]/70 rounded-3xl p-3 sm:p-3.5 text-center flex flex-col items-center border border-emerald-100/80 dark:border-emerald-800/60 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
-              >
-                <div className="group-hover:scale-105 transition-transform">
-                  <SwachhWarriorBadgeIcon size={56} />
-                </div>
-                <h3 className="text-xs font-extrabold text-[#0f172a] dark:text-emerald-100 mt-2 leading-tight">
-                  Swachh Warrior
-                </h3>
-                <span className="text-[10px] text-[#64748b] dark:text-emerald-300/80 mt-0.5 leading-tight line-clamp-2">
-                  100 lifetime points
-                </span>
-              </div>
-
-              {/* Badge 2: Community Cleaner */}
-              <div
-                onClick={() => setSelectedBadge('badge-community-cleaner')}
-                className="bg-[#EBF7F9] dark:bg-[#0c2a38]/70 rounded-3xl p-3 sm:p-3.5 text-center flex flex-col items-center border border-cyan-100/80 dark:border-cyan-800/60 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
-              >
-                <div className="group-hover:scale-105 transition-transform">
-                  <CommunityCleanerBadgeIcon size={56} />
-                </div>
-                <h3 className="text-xs font-extrabold text-[#0f172a] dark:text-cyan-100 mt-2 leading-tight">
-                  Community Cleaner
-                </h3>
-                <span className="text-[10px] text-[#64748b] dark:text-cyan-300/80 mt-0.5 leading-tight line-clamp-2">
-                  Two verified cleanups organised
-                </span>
-              </div>
-
-              {/* Badge 3: Volunteer Regular */}
-              <div
-                onClick={() => setSelectedBadge('badge-volunteer-regular')}
-                className="bg-[#FEF8EB] dark:bg-[#33240a]/70 rounded-3xl p-3 sm:p-3.5 text-center flex flex-col items-center border border-amber-100/80 dark:border-amber-800/60 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
-              >
-                <div className="group-hover:scale-105 transition-transform">
-                  <VolunteerRegularBadgeIcon size={56} />
-                </div>
-                <h3 className="text-xs font-extrabold text-[#0f172a] dark:text-amber-100 mt-2 leading-tight">
-                  Volunteer Regular
-                </h3>
-                <span className="text-[10px] text-[#64748b] dark:text-amber-300/80 mt-0.5 leading-tight line-clamp-2">
-                  Five verified cleanups attended
-                </span>
-              </div>
+              {[...badges]
+                .sort((a, b) => Number(b.isUnlocked) - Number(a.isUnlocked))
+                .slice(0, showAllBadges ? badges.length : 3)
+                .map((badge) => (
+                  <div
+                    key={badge.id}
+                    onClick={() => setSelectedBadge(badge.id)}
+                    className={`rounded-3xl p-3 sm:p-3.5 text-center flex flex-col items-center border shadow-2xs hover:shadow-xs transition-all cursor-pointer group ${
+                      badge.isUnlocked
+                        ? 'bg-[#EAF6EE] dark:bg-[#062c19]/70 border-emerald-100/80 dark:border-emerald-800/60'
+                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    <div className={`group-hover:scale-105 transition-transform ${badge.isUnlocked ? '' : 'grayscale opacity-60'}`}>
+                      <CivicBadgeIcon badgeId={badge.id} size={56} />
+                    </div>
+                    <h3 className="text-xs font-extrabold text-[#0f172a] dark:text-emerald-100 mt-2 leading-tight">
+                      {badge.name}
+                    </h3>
+                    <span className="text-[10px] text-[#64748b] dark:text-emerald-300/80 mt-0.5 leading-tight line-clamp-2">
+                      {badge.isUnlocked ? badge.requirement : `${badge.progress}% there`}
+                    </span>
+                  </div>
+                ))}
             </div>
           </div>
         </div>
@@ -285,6 +258,17 @@ export const BadgesCertificatesScreen: React.FC = () => {
       )}
 
       {/* ============================================================ */}
+      {showRedeem && (
+        <RedeemModal
+          points={user.points}
+          onClose={() => setShowRedeem(false)}
+          onRequest={() => {
+            setShowRedeem(false);
+            addToast('Withdrawal request submitted (demo)', `${formatRupees(redeem.rupees)} simulated. No real money is moved.`, 'success');
+          }}
+        />
+      )}
+
       {/* FULL CERTIFICATE DETAIL MODAL (Pop out of the screen)         */}
       {/* ============================================================ */}
       {selectedCertificate && (

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -16,6 +17,8 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str
     ward: str | None = Field(default=None, max_length=80)
+    account_type: Literal["citizen", "ngo"] = "citizen"
+    ngo_code: str | None = Field(default=None, max_length=100)  # required for account_type=ngo
 
     @field_validator("name")
     @classmethod

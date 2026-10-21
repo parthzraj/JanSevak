@@ -6,7 +6,6 @@ import {
   UserNotification,
   Vacancy,
   VolunteerDrive,
-  CivicQuiz,
   Badge,
   LearnModule,
   UserProfile,
@@ -22,7 +21,6 @@ import {
   INITIAL_NOTIFICATIONS,
   INITIAL_VACANCIES,
   INITIAL_VOLUNTEER_DRIVES,
-  INITIAL_QUIZZES,
   INITIAL_BADGES,
   INITIAL_MODULES,
 } from '../mockData/initialData';
@@ -60,7 +58,14 @@ interface AppContextType {
   isLoggedIn: boolean;
   /** Log in against the Core API. Resolves true on success (an error toast is shown otherwise). */
   login: (email: string, password: string) => Promise<boolean>;
-  register: (input: { name: string; email: string; password: string; ward?: string }) => Promise<boolean>;
+  register: (input: {
+    name: string;
+    email: string;
+    password: string;
+    ward?: string;
+    account_type?: 'citizen' | 'ngo';
+    ngo_code?: string;
+  }) => Promise<boolean>;
   logout: () => void;
   posts: CivicPost[];
   createReport: (report: {
@@ -95,9 +100,8 @@ interface AppContextType {
   volunteerDrives: VolunteerDrive[];
   joinVolunteerDrive: (driveId: string) => void;
   submitVolunteerProof: (driveId: string, photoDataUrl: string, note: string) => void;
-  quizzes: CivicQuiz[];
-  completedQuizzes: Record<string, { score: number; pointsEarned: number }>;
-  completeQuiz: (quizId: string, score: number, pointsEarned: number) => void;
+  /** Apply a points/tier total that the server just returned (e.g. after a quiz). */
+  syncPoints: (points: number, tier: string) => void;
   badges: Badge[];
   modules: LearnModule[];
   completeModuleLesson: (moduleId: string) => void;
@@ -225,13 +229,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('prajapulse_volunteer_drives', JSON.stringify(volunteerDrives));
   }, [volunteerDrives]);
 
-  // Quizzes
-  const [quizzes] = useState<CivicQuiz[]>(INITIAL_QUIZZES);
-  const [completedQuizzes, setCompletedQuizzes] = useState<Record<string, { score: number; pointsEarned: number }>>(() => {
-    const saved = localStorage.getItem('prajapulse_completed_quizzes');
-    return saved ? JSON.parse(saved) : {};
-  });
-
   // Badges (7 badges matching user design specification)
   const [badges, setBadges] = useState<Badge[]>(() => {
     const saved = localStorage.getItem('prajapulse_badges');
@@ -292,10 +289,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('prajapulse_applied_vacancies', JSON.stringify(appliedVacancies));
   }, [appliedVacancies]);
-
-  useEffect(() => {
-    localStorage.setItem('prajapulse_completed_quizzes', JSON.stringify(completedQuizzes));
-  }, [completedQuizzes]);
 
   useEffect(() => {
     localStorage.setItem('prajapulse_badges', JSON.stringify(badges));
@@ -420,7 +413,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToken(res.access_token);
     setUser(toUserProfile(res.user));
     setIsLoggedIn(true);
-    addToast('Welcome, ' + res.user.name, 'Connected to PrajaPulse Bengaluru Network', 'success');
+    addToast('Welcome, ' + res.user.name, 'Connected to JanSevak Bengaluru Network', 'success');
   };
 
   const login = async (email: string, password: string): Promise<boolean> => {
@@ -433,7 +426,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const register = async (input: { name: string; email: string; password: string; ward?: string }): Promise<boolean> => {
+  const register = async (input: Parameters<AppContextType['register']>[0]): Promise<boolean> => {
     try {
       finishLogin(await registerRequest({ ...input, email: input.email.trim(), name: input.name.trim() }));
       return true;
@@ -874,27 +867,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const completeQuiz = async (quizId: string, score: number, pointsEarned: number) => {
-    setCompletedQuizzes((prev) => ({
-      ...prev,
-      [quizId]: { score, pointsEarned },
-    }));
-
-    try {
-      const res = await claimReward({ action_type: 'quiz', action_id: quizId, points: pointsEarned });
-      applyPoints(res.user_points, res.user_tier);
-      if (res.duplicate) {
-        addToast('Quiz Complete', 'Points for this quiz were already earned - one reward per quiz.', 'info');
-      } else if (res.awarded === 0) {
-        addToast('Quiz Complete', 'Daily 60-point cap reached - no points this time.', 'info');
-      } else {
-        addToast(`Quiz Complete! +${res.awarded} Points`, `Score: ${score} - great civic knowledge!`, 'reward');
-      }
-    } catch (e) {
-      addToast('Quiz saved, points not credited', errText(e), 'info');
-    }
-  };
-
   const completeModuleLesson = (moduleId: string) => {
     const mod = modules.find((m) => m.id === moduleId);
     if (!mod) return;
@@ -950,9 +922,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         volunteerDrives,
         joinVolunteerDrive,
         submitVolunteerProof,
-        quizzes,
-        completedQuizzes,
-        completeQuiz,
+        syncPoints: applyPoints,
         badges,
         modules,
         completeModuleLesson,

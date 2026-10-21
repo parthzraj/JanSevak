@@ -4,12 +4,6 @@ import {
   X,
   User,
   ClipboardList,
-  Award,
-  AlertTriangle,
-  Trophy,
-  HeartHandshake,
-  GraduationCap,
-  Gamepad2,
   Settings,
   LogOut,
   ChevronRight,
@@ -60,6 +54,8 @@ export const SidebarDrawer: React.FC = () => {
     navigate('/login');
   };
 
+  // Only personal/account shortcuts live here. Features (rewards, certificates, alerts,
+  // volunteering, academy, games) are reached from the bottom Menu so nothing is listed twice.
   const menuItems = [
     {
       label: 'My Profile',
@@ -74,45 +70,6 @@ export const SidebarDrawer: React.FC = () => {
       icon: ClipboardList,
       badge: `${user.stats.reportsCount} filed`,
       color: 'text-emerald-600',
-    },
-    {
-      label: 'Badges & Certificates',
-      path: '/badges-certificates',
-      icon: Award,
-      badge: 'Certified',
-      color: 'text-amber-600',
-    },
-    {
-      label: 'Predictive Civic Alerts',
-      path: '/alerts',
-      icon: AlertTriangle,
-      badge: 'Live',
-      color: 'text-orange-600',
-    },
-    {
-      label: 'Civic Rewards & Karma',
-      path: '/rewards',
-      icon: Trophy,
-      badge: `${user.points} pts`,
-      color: 'text-yellow-600',
-    },
-    {
-      label: 'NGO Volunteering & Drives',
-      path: '/vacancies',
-      icon: HeartHandshake,
-      color: 'text-rose-600',
-    },
-    {
-      label: 'Civic Academy (Learn)',
-      path: '/learn-certify',
-      icon: GraduationCap,
-      color: 'text-indigo-600',
-    },
-    {
-      label: 'Civic Games & Quiz',
-      path: '/games',
-      icon: Gamepad2,
-      color: 'text-purple-600',
     },
     {
       label: 'Account & Ward Settings',

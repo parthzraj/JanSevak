@@ -14,7 +14,7 @@ import { useApp } from '../context/AppContext';
 
 export const MenuScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { badges } = useApp();
+  const { badges, user } = useApp();
 
   const unlockedBadgesCount = badges ? badges.filter((b) => b.isUnlocked).length : 4;
 
@@ -128,22 +128,22 @@ export const MenuScreen: React.FC = () => {
                   <Gamepad2 className="w-5 h-5" />
                 </div>
                 <span className="text-[10px] font-extrabold text-amber-900 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full">
-                  +40 pts
+                  Win prizes
                 </span>
               </div>
 
               <div>
                 <h3 className="text-sm font-extrabold text-[#0F172A] group-hover:text-amber-800 transition-colors leading-tight">
-                  Civic Quizzes
+                  Quizzes & Contests
                 </h3>
                 <p className="text-[11px] text-[#64748B] mt-0.5 leading-snug line-clamp-2">
-                  Test your waste and water conservation instincts.
+                  Join NGO contests, win points, climb the leaderboard.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] font-bold text-amber-700 w-full">
-              <span>Play Quiz</span>
+              <span>Play & Win</span>
               <ArrowUpRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             </div>
           </button>
@@ -162,22 +162,22 @@ export const MenuScreen: React.FC = () => {
                   <BarChart3 className="w-5 h-5" />
                 </div>
                 <span className="text-[10px] font-extrabold text-blue-900 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-full">
-                  85% Solved
+                  {user.stats.reportsCount} filed
                 </span>
               </div>
 
               <div>
                 <h3 className="text-sm font-extrabold text-[#0F172A] group-hover:text-blue-800 transition-colors leading-tight">
-                  Ward Analytics
+                  My Requests & Grievances
                 </h3>
                 <p className="text-[11px] text-[#64748B] mt-0.5 leading-snug line-clamp-2">
-                  Inspect hazard timelines and municipal resolution notes.
+                  Track every report you filed and how it is being resolved.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] font-bold text-blue-700 w-full">
-              <span>View Stats</span>
+              <span>View My Requests</span>
               <ArrowUpRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             </div>
           </button>

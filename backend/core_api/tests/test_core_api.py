@@ -190,16 +190,61 @@ def test_tier_boundaries():
         "Bronze", "Bronze", "Silver", "Silver", "Gold", "Gold", "Platinum", "Platinum", "Legend"]
 
 
-def test_quiz_claim_is_one_time_and_validated(client, make_user):
+def test_quiz_claim_rejects_quiz_type_and_validates(client, make_user):
     headers, _ = make_user()
-    first = client.post("/api/rewards/claim", json={"action_type": "quiz", "action_id": "water-1", "points": 15}, headers=headers).json()
-    assert first["awarded"] == 15 and not first["duplicate"]
-    again = client.post("/api/rewards/claim", json={"action_type": "quiz", "action_id": "water-1", "points": 15}, headers=headers).json()
-    assert again["awarded"] == 0 and again["duplicate"] and again["user_points"] == 15
-    clamped = client.post("/api/rewards/claim", json={"action_type": "quiz", "action_id": "water-2", "points": 99}, headers=headers).json()
-    assert clamped["awarded"] == 25  # clamped to quiz max
-    bad = client.post("/api/rewards/claim", json={"action_type": "cleanup", "action_id": "x", "points": 40}, headers=headers)
-    assert bad.status_code == 400
+    # quizzes are graded server-side now, so they can no longer be claimed directly
+    assert client.post("/api/rewards/claim", json={"action_type": "quiz", "action_id": "quiz-1", "points": 25}, headers=headers).status_code == 400
+    ok = client.post("/api/rewards/claim", json={"action_type": "academy_module", "action_id": "m1", "points": 30}, headers=headers).json()
+    assert ok["awarded"] == 30
+    assert client.post("/api/rewards/claim", json={"action_type": "cleanup", "action_id": "x", "points": 40}, headers=headers).status_code == 400
+
+
+def _answers(quiz_id, right=True):
+    from app.services.quiz_bank import QUIZ_BY_ID
+    q = QUIZ_BY_ID[quiz_id]["questions"]
+    return [x["answer_index"] if right else (x["answer_index"] + 1) % len(x["options"]) for x in q]
+
+
+def test_quizzes_list_and_detail_hide_answers(client, make_user):
+    headers, _ = make_user()
+    lst = client.get("/api/quizzes", headers=headers).json()
+    assert len(lst) == 3 and lst[0]["attempts"] == 0 and lst[0]["passed"] is False
+    detail = client.get("/api/quizzes/quiz-1", headers=headers).json()
+    assert "answer_index" not in str(detail) and "explanation" not in str(detail)
+    assert client.get("/api/quizzes/nope", headers=headers).status_code == 404
+    assert client.get("/api/quizzes").status_code == 401
+
+
+def test_quiz_grading_and_one_time_points(client, make_user):
+    headers, _ = make_user()
+    fail = client.post("/api/quizzes/quiz-1/submit", json={"answers": _answers("quiz-1", right=False)}, headers=headers).json()
+    assert fail["score"] == 0 and not fail["passed"] and fail["points_awarded"] == 0 and fail["user_points"] == 0
+    win = client.post("/api/quizzes/quiz-1/submit", json={"answers": _answers("quiz-1")}, headers=headers).json()
+    assert win["passed"] and win["score"] == win["total"] == 4 and win["points_awarded"] == 40 and win["user_points"] == 40
+    assert win["review"][0]["correct"] and win["review"][0]["explanation"]
+    replay = client.post("/api/quizzes/quiz-1/submit", json={"answers": _answers("quiz-1")}, headers=headers).json()
+    assert replay["points_awarded"] == 0 and replay["already_rewarded"] and replay["user_points"] == 40
+    row = [q for q in client.get("/api/quizzes", headers=headers).json() if q["id"] == "quiz-1"][0]
+    assert row["attempts"] == 3 and row["best_score"] == 4 and row["passed"] and row["points_awarded"] == 40
+
+
+def test_quiz_partial_score_pays_proportionally_and_validates_input(client, make_user):
+    headers, _ = make_user()
+    ans = _answers("quiz-1")
+    ans[3] = (ans[3] + 1) % 4  # 3 of 4 right
+    res = client.post("/api/quizzes/quiz-1/submit", json={"answers": ans}, headers=headers).json()
+    assert res["score"] == 3 and res["points_awarded"] == 30
+    assert client.post("/api/quizzes/quiz-1/submit", json={"answers": [0, 1]}, headers=headers).status_code == 422
+    assert client.post("/api/quizzes/quiz-1/submit", json={"answers": [9, 9, 9, 9]}, headers=headers).status_code == 422
+
+
+def test_quiz_respects_daily_cap(client, make_user):
+    headers, _ = make_user()
+    client.post("/api/quizzes/quiz-1/submit", json={"answers": _answers("quiz-1")}, headers=headers)  # 40
+    client.post("/api/quizzes/quiz-2/submit", json={"answers": _answers("quiz-2")}, headers=headers)  # 35 -> clipped to 20
+    r = client.post("/api/quizzes/quiz-3/submit", json={"answers": _answers("quiz-3")}, headers=headers).json()
+    assert r["passed"] and r["points_awarded"] == 0 and r["capped"]
+    assert client.get("/api/auth/me", headers=headers).json()["points"] == 60
 
 
 def test_leaderboard(client, make_user):
@@ -488,6 +533,147 @@ def test_analytics_summary_is_computed_from_real_issues(client, make_user, offic
     assert s["mine"]["avg_resolution_hours"] is not None
     assert {c["category"] for c in s["mine"]["by_category"]} == {ISSUE["category"], "Water"}
     assert client.get("/api/analytics/summary").status_code == 401
+
+
+def test_monthly_report_counts_this_months_activity(client, make_user, official_headers):
+    owner_h, owner = make_user(email="o@example.com", name="Olive")
+    other_h, _ = make_user(email="x@example.com")
+    empty = client.get("/api/analytics/monthly-report", headers=owner_h).json()
+    assert empty["reports_filed"] == 0 and empty["points_earned"] == 0 and empty["reports"] == []
+
+    i1 = client.post("/api/issues", json=ISSUE, headers=owner_h).json()["issue"]["id"]
+    client.post("/api/issues", json={**ISSUE, "category": "Water"}, headers=owner_h)
+    other_issue = client.post("/api/issues", json=ISSUE, headers=other_h).json()["issue"]["id"]
+    client.post(f"/api/issues/{i1}/upvote", headers=other_h)            # a neighbour supports Olive
+    client.post(f"/api/issues/{other_issue}/upvote", headers=owner_h)  # Olive supports a neighbour
+    for st in ("Under Review", "In Progress", "Resolved"):
+        client.patch(f"/api/issues/{i1}/status", json={"status": st}, headers=official_headers)
+
+    r = client.get("/api/analytics/monthly-report", headers=owner_h).json()
+    assert r["citizen_name"] == "Olive" and r["reports_filed"] == 2 and len(r["reports"]) == 2
+    assert r["reports_resolved_this_month"] == 1 and r["status_breakdown"].get("Resolved") == 1
+    assert r["supporters_received"] == 1 and r["reports_supported"] == 1
+    me = client.get("/api/auth/me", headers=owner_h).json()
+    assert r["points_earned"] > 0 and r["net_points"] == r["points_earned"] - r["points_reversed"]
+    assert sum(line["points"] for line in r["points_breakdown"]) == r["points_earned"]
+    assert r["lifetime_points"] == me["points"]
+
+    old = client.get("/api/analytics/monthly-report?month=2020-01", headers=owner_h).json()
+    assert old["reports_filed"] == 0 and old["points_earned"] == 0 and old["month_label"] == "January 2020"
+    assert client.get("/api/analytics/monthly-report?month=2999-01", headers=owner_h).status_code == 422
+    assert client.get("/api/analytics/monthly-report?month=oops", headers=owner_h).status_code == 422
+    assert client.get("/api/analytics/monthly-report").status_code == 401
+
+
+# ---------------------------------------------------------------- NGO contests
+def _ngo(client, settings_obj=None):
+    from app.core.config import settings
+    settings.NGO_SIGNUP_CODE = "ngo-secret"
+    r = client.post("/api/auth/register", json={"name": "Clean City Trust", "email": "ngo@x.org", "password": "secret1", "account_type": "ngo", "ngo_code": "ngo-secret"})
+    assert r.status_code == 201 and r.json()["user"]["role"] == "ngo"
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+def _contest_body(**over):
+    from datetime import datetime, timedelta, timezone
+    qs = [{"question": f"Question number {i}?", "options": ["a", "b", "c"], "answer_index": i % 3, "explanation": "because"} for i in range(3)]
+    body = {"title": "Waste Wizards", "topic": "Sanitation", "prize": "Cloth bag", "time_limit_seconds": 120,
+            "ends_at": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(), "questions": qs}
+    body.update(over)
+    return body
+
+
+def _set_durations(contest_id, seconds):
+    """Pin finish times (in play order) so speed tie-breaks do not depend on test timing."""
+    from app.core.database import SessionLocal
+    from app.models.contest import ContestEntry
+    with SessionLocal() as db:
+        entries = db.query(ContestEntry).filter(ContestEntry.contest_id == contest_id).order_by(ContestEntry.id).all()
+        for e, sec in zip(entries, seconds):
+            e.duration_seconds = sec
+        db.commit()
+
+
+def _play(client, headers, contest_id, right):
+    st = client.post(f"/api/contests/{contest_id}/start", headers=headers)
+    assert st.status_code == 200, st.text
+    answers = [i % 3 if right >= i + 1 else (i + 1) % 3 for i in range(3)]  # first `right` answers correct
+    return client.post(f"/api/contests/{contest_id}/submit", json={"answers": answers}, headers=headers)
+
+
+def test_ngo_signup_needs_code_and_only_ngos_publish(client, make_user):
+    bad = client.post("/api/auth/register", json={"name": "Fake NGO", "email": "f@x.org", "password": "secret1", "account_type": "ngo", "ngo_code": "guess"})
+    assert bad.status_code == 403
+    ngo_h = _ngo(client)
+    citizen_h, _ = make_user()
+    assert client.post("/api/contests", json=_contest_body(), headers=citizen_h).status_code == 403
+    ok = client.post("/api/contests", json=_contest_body(), headers=ngo_h)
+    assert ok.status_code == 201 and ok.json()["status"] == "live" and ok.json()["question_count"] == 3
+    # validation: bad answer index, too few questions, end in the past
+    bad_q = _contest_body(); bad_q["questions"][0]["answer_index"] = 9
+    assert client.post("/api/contests", json=bad_q, headers=ngo_h).status_code == 422
+    assert client.post("/api/contests", json=_contest_body(questions=_contest_body()["questions"][:2]), headers=ngo_h).status_code == 422
+    assert client.post("/api/contests", json=_contest_body(ends_at="2020-01-01T00:00:00Z"), headers=ngo_h).status_code == 422
+
+
+def test_contest_play_once_hides_answers_and_ranks_by_score_then_speed(client, make_user):
+    ngo_h = _ngo(client)
+    cid = client.post("/api/contests", json=_contest_body(), headers=ngo_h).json()["id"]
+    a_h, _ = make_user(email="a@x.com", name="Asha")
+    b_h, _ = make_user(email="b@x.com", name="Bala")
+    c_h, _ = make_user(email="c@x.com", name="Chitra")
+    assert "answer_index" not in str(client.post(f"/api/contests/{cid}/start", headers=a_h).json())
+    assert client.post(f"/api/contests/{cid}/start", headers=ngo_h).status_code == 403  # NGOs do not play
+
+    assert _play(client, a_h, cid, right=2).json()["score"] == 2
+    assert _play(client, b_h, cid, right=3).json()["score"] == 3   # higher score beats the faster Asha
+    assert _play(client, c_h, cid, right=3).json()["score"] == 3   # same score, finished later
+    _set_durations(cid, [5, 20, 30])  # Asha fastest, Chitra slowest
+    assert client.post(f"/api/contests/{cid}/start", headers=a_h).status_code == 409      # one attempt only
+    assert client.post(f"/api/contests/{cid}/submit", json={"answers": [0, 1, 2]}, headers=a_h).status_code == 409
+
+    lb = client.get(f"/api/contests/{cid}/leaderboard", headers=a_h).json()
+    assert [r["name"] for r in lb["rows"]] == ["Bala", "Chitra", "Asha"] and lb["rows"][2]["is_me"]
+    assert client.get(f"/api/contests/{cid}/review", headers=a_h).status_code == 409   # answers hidden while live
+    # nothing is paid while the contest is live
+    assert client.get("/api/auth/me", headers=a_h).json()["points"] == 0
+
+
+def test_contest_payout_after_it_ends_is_exact_once_and_outside_the_daily_cap(client, make_user):
+    from datetime import timedelta
+    from app.core.database import SessionLocal, utcnow
+    from app.models.contest import Contest
+
+    ngo_h = _ngo(client)
+    cid = client.post("/api/contests", json=_contest_body(), headers=ngo_h).json()["id"]
+    users = [make_user(email=f"u{i}@x.com", name=f"U{i}")[0] for i in range(5)]
+    scores = [3, 3, 2, 1, 0]
+    for h, sc in zip(users, scores):
+        _play(client, h, cid, right=sc)
+    _set_durations(cid, [10, 20, 30, 40, 50])
+    # a routine action earlier today still has its full 60-point allowance after prizes land
+    with SessionLocal() as db:
+        c = db.get(Contest, cid)
+        c.starts_at = utcnow() - timedelta(days=3)
+        c.ends_at = utcnow() - timedelta(seconds=5)
+        db.commit()
+
+    lb = client.get(f"/api/contests/{cid}/leaderboard", headers=users[0]).json()
+    assert lb["contest"]["status"] == "ended" and lb["contest"]["finalized"]
+    pts = [client.get("/api/auth/me", headers=h).json()["points"] for h in users]
+    assert pts == [110, 70, 50, 10, 0]   # 100/60/40 + 10 for finishing with a right answer; 0 right = nothing
+    assert [r["rank"] for r in lb["rows"]] == [1, 2, 3, 4, 5]
+    again = [client.get("/api/auth/me", headers=h).json()["points"] for h in users]
+    client.get("/api/contests", headers=users[1]); client.get(f"/api/contests/{cid}/leaderboard", headers=users[2])
+    assert again == pts == [client.get("/api/auth/me", headers=h).json()["points"] for h in users]  # paid once
+    assert client.post(f"/api/contests/{cid}/start", headers=users[0]).status_code in (409,)
+    note_titles = [n["title"] for n in client.get("/api/notifications", headers=users[0]).json()["items"]]
+    assert any("placed #1" in t for t in note_titles)
+    review = client.get(f"/api/contests/{cid}/review", headers=users[0]).json()
+    assert len(review) == 3 and review[0]["explanation"] == "because"
+    # prizes did not use up the daily cap: a normal report today still earns in full
+    r = client.post("/api/issues", json=ISSUE, headers=users[0])
+    assert r.status_code == 201
 
 
 # ---------------------------------------------------------------- report quality & deleting reports

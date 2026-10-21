@@ -57,7 +57,7 @@ export const ProfileScreen: React.FC = () => {
       setActiveTab(tab);
     }
     if (tab === 'badges') {
-      navigate('/badges-certificates', { replace: true });
+      navigate('/rewards', { replace: true });
     }
     if (tab === 'settings') {
       setShowSettingsModal(true);
@@ -108,13 +108,6 @@ export const ProfileScreen: React.FC = () => {
             title="Edit Profile"
           >
             <Edit3 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setShowSettingsModal(true)}
-            className="p-2 rounded-full text-[#64748b] hover:text-[#0f172a] hover:bg-[#f8fafc]"
-            title="App Settings"
-          >
-            <Settings className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -481,6 +474,15 @@ export const ProfileScreen: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* App settings (moved here from the old side menu) */}
+      <button
+        onClick={() => setShowSettingsModal(true)}
+        className="w-full py-3 rounded-2xl border border-[#cbd5e1] bg-white text-[#0f2d59] hover:bg-slate-50 text-xs font-bold transition-colors flex items-center justify-center gap-2 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+      >
+        <Settings className="w-4 h-4" />
+        <span>App Settings</span>
+      </button>
 
       {/* Sign Out Button */}
       <button

@@ -41,7 +41,7 @@ export const ProfileSideDrawer: React.FC = () => {
   };
 
   const handleVersionClick = () => {
-    addToast('PrajaPulse v1.4', 'You are running the latest civic build.', 'info');
+    addToast('JanSevak v1.4', 'You are running the latest civic build.', 'info');
   };
 
   return (

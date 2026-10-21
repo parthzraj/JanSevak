@@ -8,7 +8,7 @@ export const ShareModal: React.FC = () => {
   if (!selectedPostForShare) return null;
 
   const shareUrl = `${window.location.origin}/post/${selectedPostForShare.id}`;
-  const shareText = `Check out this civic issue on PrajaPulse: "${selectedPostForShare.title}" (${selectedPostForShare.category}) in ${selectedPostForShare.reporter.wardOrArea}.`;
+  const shareText = `Check out this civic issue on JanSevak: "${selectedPostForShare.title}" (${selectedPostForShare.category}) in ${selectedPostForShare.reporter.wardOrArea}.`;
 
   const handleCopyLink = () => {
     navigator.clipboard?.writeText?.(shareUrl);

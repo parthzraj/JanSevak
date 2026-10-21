@@ -47,6 +47,18 @@ export const CATEGORY_VISUALS: Record<CivicCategory, { url: string; grad: string
 // Points needed for the next tier (same table as the backend: backend/core_api/app/services/points_engine.py)
 export const nextLevelPoints = (points: number): number => [100, 300, 750, 2000].find((t) => points < t) ?? 2000;
 
+/** Tier floors, in order: Bronze, Silver, Gold, Platinum, Legend (same table as the backend). */
+export const TIER_FLOORS = [0, 100, 300, 750, 2000];
+
+/** Index into TIER_FLOORS for a points total, so the tier is always derived from live points. */
+export const tierIndexFor = (points: number): number => {
+  let idx = 0;
+  TIER_FLOORS.forEach((floor, i) => {
+    if (points >= floor) idx = i;
+  });
+  return idx;
+};
+
 export function timeAgo(iso: string): string {
   if (Number.isNaN(new Date(iso).getTime())) return '';
   const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);

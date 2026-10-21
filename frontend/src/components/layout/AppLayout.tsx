@@ -8,7 +8,6 @@ import { CommentsSheet } from '../feed/CommentsSheet';
 import { ShareModal } from '../feed/ShareModal';
 import { CivicChatbot } from '../chat/CivicChatbot';
 import { MenuPopupModal } from './MenuPopupModal';
-import { SidebarDrawer } from './SidebarDrawer';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -35,7 +34,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       {/* Phone container shell: max-w-lg on larger screens with subtle border and elevation */}
       <div className="w-full max-w-lg min-h-screen bg-[#f8fafc] dark:bg-[#0b1120] relative flex flex-col shadow-2xl border-x border-[#cbd5e1] dark:border-slate-800 transition-colors duration-250">
         <ToastContainer />
-        <SidebarDrawer />
         <PostDetailModal />
         <CommentsSheet />
         <ShareModal />

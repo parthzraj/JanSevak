@@ -246,7 +246,7 @@ export interface UserProfile {
   level: string;
   nextLevelPoints: number;
   joinedDate: string;
-  role?: 'citizen' | 'official' | 'admin';
+  role?: 'citizen' | 'official' | 'ngo' | 'admin';
   stats: {
     reportsCount: number;
     supportedCount: number;
