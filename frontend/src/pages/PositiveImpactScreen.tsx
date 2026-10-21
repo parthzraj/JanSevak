@@ -11,8 +11,9 @@ import { BeforeAfterSlider } from '../components/impact/BeforeAfterSlider';
 import { ReelShareSheet, type ShareChannel } from '../components/impact/ReelShareSheet';
 import { ReelCommentsSheet } from '../components/impact/ReelCommentsSheet';
 import { ImpactStatsSheet } from '../components/impact/ImpactStatsSheet';
+import { ReelImpactAuditSheet } from '../components/impact/ReelImpactAuditSheet';
 
-type Tab = 'all' | 'saved';
+type Tab = 'all' | 'high_impact' | 'saved';
 const SWIPE_PX = 60;
 
 export const PositiveImpactScreen: React.FC = () => {
@@ -28,7 +29,7 @@ export const PositiveImpactScreen: React.FC = () => {
   const [dragY, setDragY] = useState(0);
   const [animating, setAnimating] = useState(false);
   const [heartId, setHeartId] = useState<string | null>(null);
-  const [panel, setPanel] = useState<null | 'comments' | 'share' | 'stats'>(null);
+  const [panel, setPanel] = useState<null | 'comments' | 'share' | 'stats' | 'impact_audit'>(null);
   const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
 
   const boxRef = useRef<HTMLDivElement>(null);
@@ -40,7 +41,10 @@ export const PositiveImpactScreen: React.FC = () => {
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const list = (await getReels(1, tab === 'saved', 30)).items.map(toReel);
+      let list = (await getReels(1, tab === 'saved', 30)).items.map(toReel);
+      if (tab === 'high_impact') {
+        list = list.filter((r) => (r.impactScore ?? 80) >= 75 || r.impactTier === 'Transformational');
+      }
       // A shared link opens that story first, even if it is not on the first page.
       if (tab === 'all' && sharedId && !list.some((r) => r.id === sharedId)) {
         try {
@@ -213,16 +217,20 @@ export const PositiveImpactScreen: React.FC = () => {
 
   const Tabs = (
     <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between p-3 pointer-events-none">
-      <div className="flex items-center gap-1 bg-black/55 backdrop-blur-md rounded-full p-1 border border-white/20 pointer-events-auto">
-        {(['all', 'saved'] as Tab[]).map((t) => (
+      <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md rounded-full p-1 border border-white/20 pointer-events-auto shadow-lg">
+        {([
+          { id: 'all', label: 'Impact Reels' },
+          { id: 'high_impact', label: '✨ High Impact' },
+          { id: 'saved', label: 'Saved' },
+        ] as { id: Tab; label: string }[]).map((t) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={t.id}
+            onClick={() => setTab(t.id)}
             className={`px-3 py-1 rounded-full text-[11px] font-extrabold cursor-pointer transition-colors ${
-              tab === t ? 'bg-white text-[#0f2d59]' : 'text-white/85'
+              tab === t.id ? 'bg-white text-[#0f2d59] shadow-xs' : 'text-white/85 hover:text-white'
             }`}
           >
-            {t === 'all' ? 'Impact Reels' : 'Saved'}
+            {t.label}
           </button>
         ))}
       </div>
@@ -319,11 +327,21 @@ export const PositiveImpactScreen: React.FC = () => {
                   </div>
                 )}
 
-                {!both && (
-                  <span className="absolute top-16 left-3 z-10 text-[10px] font-bold bg-black/55 text-white/90 px-2.5 py-1 rounded-full">
-                    {reel.afterImage ? 'After photo' : reel.beforeImage ? 'Reported photo' : 'Illustration'}
-                  </span>
-                )}
+                <div className="absolute top-16 left-3 z-10 flex items-center gap-1.5 flex-wrap pointer-events-auto">
+                  {!both && (
+                    <span className="text-[10px] font-bold bg-black/55 text-white/90 px-2.5 py-1 rounded-full backdrop-blur-xs border border-white/10">
+                      {reel.afterImage ? 'After photo' : reel.beforeImage ? 'Reported photo' : 'Illustration'}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setPanel('impact_audit')}
+                    className="flex items-center gap-1 text-[10px] font-extrabold bg-emerald-600/90 hover:bg-emerald-600 text-white px-2.5 py-1 rounded-full backdrop-blur-md border border-white/20 shadow-md cursor-pointer transition-transform active:scale-95"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-200" />
+                    <span>AI {reel.impactTier || 'Verified'} ({reel.impactScore || 85} pts)</span>
+                  </button>
+                </div>
 
                 <div className="absolute inset-x-0 bottom-0 z-10 p-4 pb-5 flex items-end justify-between gap-3 pointer-events-none">
                   <div className="flex-1 min-w-0 space-y-2 pointer-events-auto">
@@ -352,6 +370,14 @@ export const PositiveImpactScreen: React.FC = () => {
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                         Resolved in {reel.daysToResolve} day{reel.daysToResolve === 1 ? '' : 's'}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => setPanel('impact_audit')}
+                        className="flex items-center gap-1 text-[10px] font-bold bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-300 px-2.5 py-1 rounded-xl border border-emerald-400/30 cursor-pointer transition-colors"
+                      >
+                        <Sparkles className="w-3 h-3 text-amber-300" />
+                        AI Audit • {reel.impactTier || 'Verified'}
+                      </button>
                       <span className="flex items-center gap-1 text-[10px] bg-black/50 px-2 py-1 rounded-xl border border-white/10">
                         <Users className="w-3 h-3" />
                         {reel.supporters} citizen{reel.supporters === 1 ? '' : 's'} backed it
@@ -408,6 +434,9 @@ export const PositiveImpactScreen: React.FC = () => {
         <ReelShareSheet title={current.title} url={shareUrl} text={shareText} onShared={onShared} onClose={() => setPanel(null)} />
       )}
       {panel === 'stats' && <ImpactStatsSheet onClose={() => setPanel(null)} />}
+      {panel === 'impact_audit' && current && (
+        <ReelImpactAuditSheet reel={current} onClose={() => setPanel(null)} />
+      )}
     </div>
   );
 };

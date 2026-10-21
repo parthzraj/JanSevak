@@ -127,6 +127,11 @@ export interface ReelStory {
   shares: number;
   hasLiked: boolean;
   isSaved: boolean;
+  impactScore?: number;
+  impactTier?: 'Transformational' | 'Significant' | 'Moderate' | 'Routine / Low';
+  isVerified?: boolean;
+  keyTransformation?: string | null;
+  communityTakeaway?: string | null;
 }
 
 export interface UserNotification {

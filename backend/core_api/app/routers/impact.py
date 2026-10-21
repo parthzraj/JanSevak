@@ -78,6 +78,23 @@ def _reel(issue: CivicIssue, c) -> ImpactReel:
     r = issue.reporter
     after = issue.resolution_images
     before = issue.images
+
+    full_text = f"{issue.title} {issue.category} {issue.description} {issue.resolution_note or ''}".lower()
+    score = 75
+    tier = "Significant"
+    if any(w in full_text for w in ["mass drive", "volunteer", "campaign", "dumpsite", "black spot", "chronic", "multi-ton", "sinkhole", "crater", "overhaul", "saplings"]):
+        score = 92
+        tier = "Transformational"
+    elif any(w in full_text for w in ["routine", "swept", "broom", "daily sweep", "minor sweeping"]):
+        score = 42
+        tier = "Routine / Low"
+    elif len(issue.resolution_note or "") > 45:
+        score = 85
+        tier = "Transformational"
+
+    transformation = issue.resolution_note or f"{issue.category} issue successfully rectified."
+    takeaway = "Active citizen reporting and swift civic redressal improve neighborhood safety and hygiene."
+
     return ImpactReel(
         id=issue.id,
         title=issue.title,
@@ -96,6 +113,11 @@ def _reel(issue: CivicIssue, c) -> ImpactReel:
         shares=shares.get(issue.id, 0),
         has_liked=issue.id in liked,
         is_saved=issue.id in saved,
+        impact_score=score,
+        impact_tier=tier,
+        is_verified=tier != "Routine / Low",
+        key_transformation=transformation,
+        community_takeaway=takeaway,
     )
 
 
@@ -111,6 +133,7 @@ def list_reels(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=30),
     saved: bool = False,
+    tier: str | None = Query(None),
     db: Session = Depends(get_db),
     viewer: User | None = Depends(get_optional_user),
 ):

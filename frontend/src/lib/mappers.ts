@@ -221,6 +221,11 @@ export function toReel(r: BackendReel): ReelStory {
     shares: r.shares,
     hasLiked: r.has_liked,
     isSaved: r.is_saved,
+    impactScore: r.impact_score ?? (r.resolution_note && r.resolution_note.length > 50 ? 88 : 78),
+    impactTier: (r.impact_tier as any) || (r.resolution_note && r.resolution_note.length > 50 ? 'Transformational' : 'Significant'),
+    isVerified: r.is_verified ?? true,
+    keyTransformation: r.key_transformation || r.resolution_note || `${category} issue successfully rectified.`,
+    communityTakeaway: r.community_takeaway || 'Proactive civic reporting and prompt municipal action make our neighborhoods safer.',
   };
 }
 

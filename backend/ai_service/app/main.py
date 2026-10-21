@@ -1,5 +1,8 @@
+import base64
 import json
 import logging
+import re
+from typing import Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,6 +17,7 @@ from app.schemas import (
     ImageAnalysisResponse, PrepareWithImageResponse,
     PhotoVerifyResponse, PredictiveAlertsListResponse,
     StreetRiskRequest, StreetRiskResponse,
+    ImpactVerifyResponse,
 )
 from app.modules.chatbot import chat_with_prajapulse
 from app.modules.complaint_generator import generate_complaint
@@ -24,6 +28,7 @@ from app.modules.suggestive_remarks import generate_suggestive_remarks
 from app.modules.image_analyzer import analyze_civic_image, prepare_complaint_with_image
 from app.modules.photo_verifier import verify_photo
 from app.modules.predictive_engine import get_predictive_alerts, check_street_risk
+from app.modules.impact_verifier import verify_impact_reel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("prajapulse-ai")
@@ -278,5 +283,59 @@ def street_risk_endpoint(req: StreetRiskRequest):
         raise HTTPException(status_code=504, detail=str(e))
     except Exception as e:
         logger.exception("Error in street risk check")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/impact/verify", response_model=ImpactVerifyResponse)
+async def impact_verify_endpoint(
+    before_image: Optional[UploadFile] = File(None),
+    after_image: Optional[UploadFile] = File(None),
+    title: str = Form(""),
+    category: str = Form(""),
+    description: str = Form(""),
+    resolution_note: str = Form(""),
+    before_image_b64: Optional[str] = Form(None),
+    after_image_b64: Optional[str] = Form(None),
+):
+    """Verify before & after photos and assess community impact scale for Impact Reels."""
+    try:
+        before_bytes: Optional[bytes] = None
+        after_bytes: Optional[bytes] = None
+
+        if before_image is not None:
+            before_bytes = await before_image.read()
+        elif before_image_b64:
+            clean_b64 = re.sub(r"^data:image/[^;]+;base64,", "", before_image_b64.strip())
+            try:
+                before_bytes = base64.b64decode(clean_b64)
+            except Exception:
+                before_bytes = None
+
+        if after_image is not None:
+            after_bytes = await after_image.read()
+        elif after_image_b64:
+            clean_b64 = re.sub(r"^data:image/[^;]+;base64,", "", after_image_b64.strip())
+            try:
+                after_bytes = base64.b64decode(clean_b64)
+            except Exception:
+                after_bytes = None
+
+        result = verify_impact_reel(
+            before_image_bytes=before_bytes,
+            after_image_bytes=after_bytes,
+            title=title,
+            category=category,
+            description=description,
+            resolution_note=resolution_note,
+        )
+        return ImpactVerifyResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ConnectionError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except TimeoutError as e:
+        raise HTTPException(status_code=504, detail=str(e))
+    except Exception as e:
+        logger.exception("Error in impact reel verification")
         raise HTTPException(status_code=500, detail=str(e))
 

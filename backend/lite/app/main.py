@@ -165,6 +165,20 @@ class StreetRiskResponse(BaseModel):
     predictedHazard: str
     actionRequired: str
 
+
+class ImpactVerifyResponse(BaseModel):
+    verdict: str  # "approved", "rejected", "flagged"
+    is_civic_niche: bool
+    is_location_match: bool
+    impact_score: int
+    impact_tier: str  # "Transformational", "Significant", "Moderate", "Routine / Low"
+    confidence: float
+    reason: str
+    rejection_reasons: List[str] = []
+    key_transformation: str = ""
+    community_takeaway: str = ""
+    suggested_badges: List[str] = []
+
 # ── Template Responses ─────────────────────────────────────────────────
 
 CHATBOT_RESPONSES = [
@@ -582,4 +596,65 @@ def street_risk_endpoint(req: StreetRiskRequest):
         probability=probability,
         predictedHazard=hazard,
         actionRequired=action,
+    )
+
+
+@app.post("/api/impact/verify", response_model=ImpactVerifyResponse)
+def impact_verify_endpoint(
+    before_image: Optional[UploadFile] = File(None),
+    after_image: Optional[UploadFile] = File(None),
+    title: str = Form(""),
+    category: str = Form(""),
+    description: str = Form(""),
+    resolution_note: str = Form(""),
+    before_image_b64: Optional[str] = Form(None),
+    after_image_b64: Optional[str] = Form(None),
+):
+    """Lite fallback: rule-based civic impact and before/after verification."""
+    full_text = f"{title} {category} {description} {resolution_note}".lower()
+
+    non_civic = ["cook", "recipe", "kitchen", "paneer", "chicken", "biryani", "food", "selfie", "outfit", "meme", "pet", "dog", "cat", "gameplay", "dance"]
+    routine = ["daily sweeping", "swept road", "swept dust", "routine sweeping", "swept sidewalk", "broomed", "broom sweep", "routine janitorial", "regular sweep", "just cleaning", "regular cleaning", "normal cleaning", "cleaning of roadside garbage", "roadside garbage cleaning"]
+    high = ["mass drive", "mass cleanup", "campaign", "volunteer", "volunteers", "dumpsite", "blackspot", "chronic dump", "multi-ton", "sinkhole", "crater", "waterlogging", "desilting", "culvert", "reclaimed", "rejuvenation", "beautification", "saplings"]
+
+    rejection_reasons = []
+    is_civic = not any(w in full_text for w in non_civic)
+    if not is_civic:
+        rejection_reasons.append("Non-Civic Content: Reel does not match municipal or public infrastructure domain.")
+
+    river_lake = any(w in resolution_note.lower() for w in ["river", "lake", "ocean", "beach", "mountain", "bedroom"])
+    street_waste = any(w in f"{title} {description}".lower() for w in ["garbage", "dump", "pothole", "manhole", "sewage", "street", "road"])
+    is_location_match = not (river_lake and street_waste)
+    if not is_location_match:
+        rejection_reasons.append("Location Mismatch: 'Before' photo shows street grievance while 'After' shows an unrelated scene.")
+
+    found_high = [w for w in high if w in full_text]
+    found_routine = [w for w in routine if w in full_text]
+
+    is_routine_maintenance = bool(found_routine and not found_high)
+    if is_routine_maintenance:
+        score = 35
+        tier = "Routine / Low"
+        rejection_reasons.append("Routine / Trivial Maintenance: Impact Reels require transformational community achievements, mass drives, or major repairs. Daily routine sweeping does not qualify.")
+    else:
+        score = 85 if found_high else 65
+        tier = "Transformational" if score >= 80 else "Significant"
+
+    verdict = "approved" if (is_civic and is_location_match and tier != "Routine / Low" and score >= 50) else "rejected"
+    reason = f"Verified {tier.lower()} civic redressal." if verdict == "approved" else (" | ".join(rejection_reasons) if rejection_reasons else "Does not qualify for Impact Reels.")
+
+    badges = ["Transformational Milestone", "High Impact Drive"] if tier == "Transformational" else ["Verified Civic Fix"]
+
+    return ImpactVerifyResponse(
+        verdict=verdict,
+        is_civic_niche=is_civic,
+        is_location_match=is_location_match,
+        impact_score=score,
+        impact_tier=tier,
+        confidence=0.85,
+        reason=reason,
+        rejection_reasons=rejection_reasons,
+        key_transformation=f"{category or 'Civic'} improvement demonstrated." if is_civic else "Non-civic content.",
+        community_takeaway="Proactive civic reporting and collective community work drive real neighborhood change.",
+        suggested_badges=badges,
     )
