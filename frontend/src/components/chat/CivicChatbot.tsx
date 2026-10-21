@@ -362,7 +362,7 @@ export const CivicChatbot: React.FC<CivicChatbotProps> = ({ isReelsPage = false 
 
             {/* Micro Demo Disclaimer */}
             <div className="bg-[#f1f5f9] py-1 text-center text-[9.5px] text-[#64748b] border-t border-[#cbd5e1]">
-              Powered by PrajaPulse AI
+              Powered by JanSevak AI
             </div>
           </div>
         )}

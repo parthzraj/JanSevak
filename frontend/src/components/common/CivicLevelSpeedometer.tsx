@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Check } from 'lucide-react';
 import { LEVEL_MILESTONES } from '../../mockData/initialData';
+import { TIER_FLOORS, tierIndexFor } from '../../lib/mappers';
 import {
   BronzeMedalIcon,
   SilverMedalIcon,
@@ -11,55 +12,26 @@ import {
 
 interface CivicLevelSpeedometerProps {
   userPoints?: number;
+  /** Kept for compatibility; the tier is computed from userPoints. */
   userLevel?: string;
   theme?: 'green' | 'blue';
 }
 
 export const CivicLevelSpeedometer: React.FC<CivicLevelSpeedometerProps> = ({
-  userPoints = 107,
-  userLevel = 'Silver',
+  userPoints = 0,
   theme = 'green',
 }) => {
-  // Determine active level index (bronze=0, silver=1, gold=2, platinum=3, legend=4)
-  const levelMap: Record<string, number> = {
-    bronze: 0,
-    silver: 1,
-    gold: 2,
-    platinum: 3,
-    legend: 4,
-  };
-  const userLevelId = userLevel.toLowerCase().trim().split(' ')[0];
-  const initialIdx = levelMap[userLevelId] ?? Math.max(
-    0,
-    LEVEL_MILESTONES.findIndex((m) => m.id === userLevelId)
-  );
+  // The tier is always derived from the live points total; it cannot be switched by hand.
+  const points = Math.max(0, Math.floor(userPoints));
+  const tierIdx = tierIndexFor(points);
+  const isTop = tierIdx === LEVEL_MILESTONES.length - 1;
+  const currentMilestone = LEVEL_MILESTONES[tierIdx];
+  const prevMilestone = tierIdx > 0 ? LEVEL_MILESTONES[tierIdx - 1] : null;
+  const nextMilestone = isTop ? null : LEVEL_MILESTONES[tierIdx + 1];
 
-  // Allow clicking milestones to preview any tier
-  const [selectedIdx, setSelectedIdx] = useState<number>(initialIdx);
-
-  const currentMilestone = LEVEL_MILESTONES[selectedIdx] || LEVEL_MILESTONES[2];
-  const prevMilestone =
-    selectedIdx > 0 ? LEVEL_MILESTONES[selectedIdx - 1] : LEVEL_MILESTONES[0];
-  const nextMilestone =
-    selectedIdx < LEVEL_MILESTONES.length - 1
-      ? LEVEL_MILESTONES[selectedIdx + 1]
-      : LEVEL_MILESTONES[LEVEL_MILESTONES.length - 1];
-
-  // Specific milestone points matching the designs
-  const tierConfig: Record<number, { current: number; target: number; prev: number; next: number; fraction: number }> = {
-    0: { current: 45, target: 100, prev: 0, next: 100, fraction: 0.45 },
-    1: { current: 107, target: 207, prev: 100, next: 200, fraction: 0.52 },
-    2: { current: 340, target: 750, prev: 100, next: 750, fraction: 0.38 },
-    3: { current: 890, target: 2000, prev: 300, next: 2000, fraction: 0.42 },
-    4: { current: 2350, target: 3000, prev: 750, next: 3000, fraction: 0.75 },
-  };
-
-  const cfg = tierConfig[selectedIdx] || tierConfig[2];
-  const prevPoints = cfg.prev;
-  const nextPoints = cfg.next;
-  const currentPoints = cfg.current;
-  const targetPoints = cfg.target;
-  const progressFraction = cfg.fraction;
+  const floor = TIER_FLOORS[tierIdx];
+  const ceiling = isTop ? null : TIER_FLOORS[tierIdx + 1];
+  const progressFraction = ceiling === null ? 1 : Math.min(1, (points - floor) / (ceiling - floor));
 
   // SVG Geometry
   // Center: (210, 180), Radius: 140
@@ -96,30 +68,6 @@ export const CivicLevelSpeedometer: React.FC<CivicLevelSpeedometerProps> = ({
 
   return (
     <div className="w-full flex flex-col items-center">
-      {/* Interactive Tier Switcher Tabs (Exact Match to User Screenshot) */}
-      <div className="bg-[#EEF3F6] dark:bg-slate-800/90 p-1 rounded-full inline-flex items-center gap-1 mb-4 shadow-2xs max-w-full overflow-x-auto">
-        {LEVEL_MILESTONES.map((m, idx) => {
-          const isSelected = selectedIdx === idx;
-
-          return (
-            <button
-              key={m.id}
-              onClick={() => setSelectedIdx(idx)}
-              className={`px-3 sm:px-3.5 py-1 rounded-full text-xs transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                isSelected
-                  ? 'bg-white dark:bg-slate-700 text-[#103E27] dark:text-emerald-300 font-extrabold shadow-xs ring-1 ring-black/5'
-                  : 'text-[#62778A] dark:text-slate-400 hover:text-[#1E293B] dark:hover:text-slate-200 font-semibold'
-              }`}
-            >
-              <span>{m.name}</span>
-              {isSelected && (
-                <span className="w-2 h-2 rounded-full bg-[#00875A] inline-block shrink-0" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Main Gauge Canvas (Exact Reference Image Recreation) */}
       <div className="relative w-full max-w-[420px] aspect-[420/350] mx-auto select-none">
         {/* Background SVG Arch and Active Arc */}
@@ -249,17 +197,17 @@ export const CivicLevelSpeedometer: React.FC<CivicLevelSpeedometerProps> = ({
         >
           {/* Medal with Checkmark */}
           <div className="relative group hover:scale-105 transition-transform drop-shadow-sm">
-            {renderMedal(prevMilestone.id, 72)}
-            {/* Circular Checkmark Badge */}
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#A75D35] text-white rounded-full flex items-center justify-center border-2 border-white dark:border-slate-800 shadow-xs">
+            {prevMilestone ? renderMedal(prevMilestone.id, 72) : <div className="w-[72px] h-[72px] rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-[10px] font-bold text-slate-400">Start</div>}
+            {/* Circular Checkmark Badge (only for a tier already earned) */}
+            {prevMilestone && <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#A75D35] text-white rounded-full flex items-center justify-center border-2 border-white dark:border-slate-800 shadow-xs">
               <Check className="w-3.5 h-3.5 stroke-[3]" />
-            </div>
+            </div>}
           </div>
 
           {/* Threshold Pill e.g. 100 */}
           <div className="mt-2.5 bg-[#F1F5F9] dark:bg-slate-800 border border-[#cbd5e1] dark:border-slate-700 px-4 py-1 rounded-full text-center shadow-2xs">
             <span className="text-xs sm:text-sm font-extrabold text-[#475569] dark:text-slate-300 tabular-nums tracking-tight">
-              {prevPoints}
+              {prevMilestone ? TIER_FLOORS[tierIdx - 1] : 0}
             </span>
           </div>
         </div>
@@ -277,10 +225,10 @@ export const CivicLevelSpeedometer: React.FC<CivicLevelSpeedometerProps> = ({
           {/* Score Pill e.g. 107/207 */}
           <div className="mt-2 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xs border border-[#BFDBFE] dark:border-blue-900/60 px-5 py-1.5 rounded-full shadow-md shadow-blue-500/10 inline-flex items-center gap-1.5">
             <span className="text-lg sm:text-xl font-black text-[#1E293B] dark:text-white tabular-nums tracking-tight">
-              {currentPoints}
+              {points}
             </span>
             <span className="text-base sm:text-lg font-bold text-[#64748B] dark:text-slate-400">
-              /{targetPoints}
+              {ceiling !== null ? `/${ceiling}` : ' pts'}
             </span>
           </div>
 
@@ -296,13 +244,13 @@ export const CivicLevelSpeedometer: React.FC<CivicLevelSpeedometerProps> = ({
         >
           {/* Upcoming Medal */}
           <div className="relative group hover:scale-105 transition-transform opacity-95 drop-shadow-sm">
-            {renderMedal(nextMilestone.id, 72)}
+            {nextMilestone ? renderMedal(nextMilestone.id, 72) : <div className="w-[72px] h-[72px] rounded-full bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300">Top tier</div>}
           </div>
 
           {/* Target Threshold Pill e.g. 200 */}
           <div className="mt-2.5 bg-[#F1F5F9] dark:bg-slate-800 border border-[#cbd5e1] dark:border-slate-700 px-4 py-1 rounded-full text-center shadow-2xs">
             <span className="text-xs sm:text-sm font-extrabold text-[#475569] dark:text-slate-300 tabular-nums tracking-tight">
-              {nextPoints}
+              {ceiling !== null ? ceiling : 'MAX'}
             </span>
           </div>
         </div>

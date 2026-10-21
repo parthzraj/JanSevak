@@ -9,10 +9,11 @@ import { CreateReportScreen } from './pages/CreateReportScreen';
 import { PositiveImpactScreen } from './pages/PositiveImpactScreen';
 import { MenuScreen } from './pages/MenuScreen';
 import { VacanciesScreen } from './pages/VacanciesScreen';
+import { ContestScreen } from './pages/ContestScreen';
+import { NgoStudioScreen } from './pages/NgoStudioScreen';
 import { GamesScreen } from './pages/GamesScreen';
 import { ReportAnalysisScreen } from './pages/ReportAnalysisScreen';
 import { LearnCertifyScreen } from './pages/LearnCertifyScreen';
-import { BadgesCertificatesScreen } from './pages/BadgesCertificatesScreen';
 import { NotificationsScreen } from './pages/NotificationsScreen';
 import { RewardsScreen } from './pages/RewardsScreen';
 import { ProfileScreen } from './pages/ProfileScreen';
@@ -44,7 +45,7 @@ const AppRoutes: React.FC = () => {
           path="/home"
           element={
             <ProtectedRoute>
-              <HomeScreen />
+              <HomeRoute />
             </ProtectedRoute>
           }
         />
@@ -88,6 +89,8 @@ const AppRoutes: React.FC = () => {
             </ProtectedRoute>
           }
         />
+        <Route path="/contest/:id" element={<ProtectedRoute><ContestScreen /></ProtectedRoute>} />
+        <Route path="/ngo" element={<ProtectedRoute><NgoStudioScreen /></ProtectedRoute>} />
         <Route
           path="/games"
           element={
@@ -112,22 +115,8 @@ const AppRoutes: React.FC = () => {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/badges-certificates"
-          element={
-            <ProtectedRoute>
-              <BadgesCertificatesScreen />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/badges"
-          element={
-            <ProtectedRoute>
-              <BadgesCertificatesScreen />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/badges-certificates" element={<Navigate to="/rewards" replace />} />
+        <Route path="/badges" element={<Navigate to="/rewards" replace />} />
         <Route
           path="/notifications"
           element={
@@ -181,6 +170,12 @@ const AppRoutes: React.FC = () => {
       </Routes>
     </AppLayout>
   );
+};
+
+/** NGO accounts have no citizen feed: their home is the NGO Studio. */
+const HomeRoute: React.FC = () => {
+  const { user } = useApp();
+  return user.role === 'ngo' ? <Navigate to="/ngo" replace /> : <HomeScreen />;
 };
 
 export default function App() {

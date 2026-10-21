@@ -12,6 +12,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { MonthlyReportCard } from '../components/common/MonthlyReportCard';
 import { fetchAnalytics, type BackendStats } from '../lib/api';
 
 const CATEGORY_COLOURS: Record<string, string> = {
@@ -90,7 +91,7 @@ export const ReportAnalysisScreen: React.FC = () => {
           </div>
           <div>
             <h1 className="text-base sm:text-lg font-extrabold text-[#0f172a]">
-              Report & Civic Analysis
+              My Requests & Grievances
             </h1>
             <p className="text-xs text-[#64748b]">
               Track your logged issues and ward resolution velocity.
@@ -98,6 +99,8 @@ export const ReportAnalysisScreen: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <MonthlyReportCard />
 
       {/* KPI Overview Cards */}
       <div className="grid grid-cols-3 gap-2">

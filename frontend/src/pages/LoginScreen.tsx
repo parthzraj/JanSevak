@@ -13,6 +13,8 @@ export const LoginScreen: React.FC = () => {
   const [name, setName] = useState('Ayush Sharma');
   const [ward, setWard] = useState('Ward 112 (Indiranagar)');
   const [showPassword, setShowPassword] = useState(false);
+  const [asNgo, setAsNgo] = useState(false);
+  const [ngoCode, setNgoCode] = useState('');
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
@@ -28,7 +30,7 @@ export const LoginScreen: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    finish(() => (isRegister ? register({ name, email, password, ward }) : login(email, password)));
+    finish(() => (isRegister ? register({ name, email, password, ward, ...(asNgo ? { account_type: 'ngo' as const, ngo_code: ngoCode } : {}) }) : login(email, password)));
   };
 
   // Demo accounts created by `python seed_data.py` in backend/core_api
@@ -41,22 +43,10 @@ export const LoginScreen: React.FC = () => {
       {/* Top Branding Section */}
       <div className="pt-4 flex flex-col items-center text-center">
         {/* Brand Icon Badge */}
-        <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-[#0f2d59] via-[#1b6843] to-[#1d4e8c] text-white flex items-center justify-center shadow-xl shadow-[#0f2d59]/25 mb-3">
-          <svg
-            className="w-8 h-8"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-          </svg>
-        </div>
+        <img src="/logo.png" alt="JanSevak logo" className="w-24 h-24 object-contain mb-2" />
 
         <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0f172a] tracking-tight">
-          PrajaPulse
+          JanSevak
         </h1>
         <p className="text-xs sm:text-sm font-semibold text-[#0f2d59] mt-1 tracking-wide">
           Your City. Your Voice. Your Impact.
@@ -122,7 +112,7 @@ export const LoginScreen: React.FC = () => {
                 : 'border-transparent text-[#64748b] hover:text-[#0f172a]'
             }`}
           >
-            Create Citizen Account
+            Create Account
           </button>
         </div>
 
@@ -156,6 +146,24 @@ export const LoginScreen: React.FC = () => {
                   className="w-full text-xs bg-[#f8fafc] border border-[#cbd5e1] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#0f2d59] focus:bg-white text-[#0f172a]"
                 />
               </div>
+              <label className="flex items-center gap-2 text-[11px] font-semibold text-[#0f172a]">
+                <input type="checkbox" checked={asNgo} onChange={(e) => setAsNgo(e.target.checked)} />
+                I am registering an NGO (to publish quiz contests)
+              </label>
+              {asNgo && (
+                <div>
+                  <label className="text-[11px] font-bold text-[#0f172a] block mb-1">NGO code</label>
+                  <input
+                    type="text"
+                    required
+                    value={ngoCode}
+                    onChange={(e) => setNgoCode(e.target.value)}
+                    placeholder="Code given by the JanSevak team"
+                    className="w-full text-xs bg-[#f8fafc] border border-[#cbd5e1] rounded-xl px-3 py-2.5 focus:outline-none focus:border-[#0f2d59] focus:bg-white text-[#0f172a]"
+                  />
+                  <p className="text-[10px] text-[#64748b] mt-1">Use your organisation's name above as the full name.</p>
+                </div>
+              )}
             </>
           )}
 
@@ -214,7 +222,7 @@ export const LoginScreen: React.FC = () => {
             className="w-full py-3 px-4 rounded-xl bg-[#0f2d59] hover:bg-[#1d4e8c] disabled:opacity-60 text-white font-bold text-xs shadow-md shadow-[#0f2d59]/20 transition-all flex items-center justify-center gap-2 active:scale-98"
           >
             <span>
-              {isSubmitting ? 'Please wait...' : isRegister ? 'Register & Join PrajaPulse' : 'Sign In to PrajaPulse'}
+              {isSubmitting ? 'Please wait...' : isRegister ? 'Register & Join JanSevak' : 'Sign In to JanSevak'}
             </span>
             <ArrowRight className="w-4 h-4" />
           </button>
@@ -353,7 +361,7 @@ export const LoginScreen: React.FC = () => {
 
       {/* Footer Info */}
       <div className="text-center py-2 text-[10px] text-[#64748b]">
-        <p>PrajaPulse Civic Network · Mobile Prototype Demo</p>
+        <p>JanSevak Civic Network · Mobile Prototype Demo</p>
       </div>
     </div>
   );

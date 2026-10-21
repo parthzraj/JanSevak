@@ -897,7 +897,7 @@ export const INITIAL_REELS: ReelStory[] = [
     id: 'reel-2',
     title: '100ft Road Night Pothole Express Fix',
     caption:
-      'Speed and accountability! After 84 citizens upvoted the severe cavity report on PrajaPulse, BBMP rapid road crew mobilized at 11 PM with a hot-mix asphalt paver and compacted the surface smoothly before morning transit.',
+      'Speed and accountability! After 84 citizens upvoted the severe cavity report on JanSevak, BBMP rapid road crew mobilized at 11 PM with a hot-mix asphalt paver and compacted the surface smoothly before morning transit.',
     creator: {
       name: 'Bangalore Civic Watch',
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&q=80',

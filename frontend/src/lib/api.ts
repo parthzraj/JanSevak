@@ -1,6 +1,5 @@
-const defaultHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-const API_BASE_URL = (import.meta.env.VITE_API_URL || `http://${defaultHost}:8000`).replace(/\/$/, '');
-const AI_API_BASE_URL = (import.meta.env.VITE_AI_API_URL || `http://${defaultHost}:8001`).replace(/\/$/, '');
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+const AI_API_BASE_URL = (import.meta.env.VITE_AI_API_URL || 'http://localhost:8001').replace(/\/$/, '');
 
 // ---------------------------------------------------------------------------
 // Auth token (kept in localStorage so a page refresh keeps the user logged in)
@@ -201,7 +200,14 @@ export interface ClaimResult {
 export const loginRequest = (email: string, password: string) =>
   post<BackendTokenResponse>('/api/auth/login', { email, password });
 
-export const registerRequest = (input: { name: string; email: string; password: string; ward?: string }) =>
+export const registerRequest = (input: {
+  name: string;
+  email: string;
+  password: string;
+  ward?: string;
+  account_type?: 'citizen' | 'ngo';
+  ngo_code?: string;
+}) =>
   post<BackendTokenResponse>('/api/auth/register', input);
 
 export const fetchMe = () => request<BackendUser>('/api/auth/me');
@@ -326,8 +332,165 @@ export async function uploadImageDataUrl(dataUrl: string): Promise<string> {
 // ---------------------------------------------------------------------------
 // Rewards & notifications
 // ---------------------------------------------------------------------------
-export const claimReward = (input: { action_type: 'quiz' | 'academy_module'; action_id: string; points: number }) =>
+export const claimReward = (input: { action_type: 'academy_module'; action_id: string; points: number }) =>
   post<ClaimResult>('/api/rewards/claim', input);
+
+// ---------------------------------------------------------------------------
+// Quizzes (graded on the server; correct answers are only revealed after submitting)
+// ---------------------------------------------------------------------------
+export interface QuizSummary {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+  points_reward: number;
+  questions_count: number;
+  estimated_minutes: number;
+  pass_mark: number;
+  attempts: number;
+  best_score: number | null;
+  passed: boolean;
+  points_awarded: number;
+}
+export interface QuizDetail {
+  id: string;
+  title: string;
+  category: string;
+  points_reward: number;
+  pass_mark: number;
+  questions: { id: number; question: string; options: string[] }[];
+}
+export interface QuizResult {
+  quiz_id: string;
+  score: number;
+  total: number;
+  passed: boolean;
+  pass_mark: number;
+  points_awarded: number;
+  already_rewarded: boolean;
+  capped: boolean;
+  note: string;
+  review: { question: string; options: string[]; your_answer: number; correct_index: number; correct: boolean; explanation: string }[];
+  user_points: number;
+  user_tier: string;
+}
+export const fetchQuizzes = () => request<QuizSummary[]>('/api/quizzes');
+export const fetchQuiz = (id: string) => request<QuizDetail>(`/api/quizzes/${id}`);
+export const submitQuiz = (id: string, answers: number[]) => post<QuizResult>(`/api/quizzes/${id}/submit`, { answers });
+
+// ---------------------------------------------------------------------------
+// Monthly contribution report
+// ---------------------------------------------------------------------------
+export interface MonthlyReport {
+  month: string;
+  month_label: string;
+  generated_at: string;
+  citizen_name: string;
+  ward: string | null;
+  tier: string;
+  lifetime_points: number;
+  next_tier: string | null;
+  points_to_next_tier: number;
+  reports_filed: number;
+  reports_resolved_this_month: number;
+  status_breakdown: Record<string, number>;
+  category_breakdown: { category: string; count: number; percent: number }[];
+  reports: { id: number; title: string; category: string; status: string; created_at: string; supporters: number }[];
+  supporters_received: number;
+  reports_supported: number;
+  evidence_added: number;
+  comments_made: number;
+  points_earned: number;
+  points_reversed: number;
+  net_points: number;
+  points_breakdown: { action_type: string; label: string; count: number; points: number }[];
+}
+export const fetchMonthlyReport = (month: string) => request<MonthlyReport>(`/api/analytics/monthly-report?month=${encodeURIComponent(month)}`);
+
+// ---------------------------------------------------------------------------
+// NGO contests
+// ---------------------------------------------------------------------------
+export interface ContestEntrySummary {
+  state: 'not_started' | 'in_progress' | 'submitted';
+  score: number | null;
+  total: number;
+  rank: number | null;
+  bonus_points: number;
+  duration_seconds: number | null;
+}
+export interface Contest {
+  id: number;
+  title: string;
+  topic: string;
+  description: string;
+  prize: string | null;
+  ngo_id: number;
+  ngo_name: string;
+  status: 'upcoming' | 'live' | 'ended';
+  starts_at: string;
+  ends_at: string;
+  time_limit_seconds: number;
+  question_count: number;
+  participants: number;
+  finalized: boolean;
+  my_entry: ContestEntrySummary | null;
+}
+export interface ContestStart {
+  contest: Contest;
+  started_at: string;
+  deadline: string;
+  questions: { id: number; question: string; options: string[] }[];
+}
+export interface ContestSubmitResult {
+  score: number;
+  total: number;
+  duration_seconds: number;
+  timed_out: boolean;
+  note: string;
+}
+export interface ContestLeaderRow {
+  rank: number;
+  user_id: number;
+  name: string;
+  avatar_url: string | null;
+  score: number;
+  total: number;
+  duration_seconds: number;
+  bonus_points: number;
+  is_me: boolean;
+}
+export interface ContestLeaderboard {
+  contest: Contest;
+  rows: ContestLeaderRow[];
+  prizes: Record<string, number>;
+  participation_points: number;
+}
+export interface ContestReviewItem {
+  question: string;
+  options: string[];
+  your_answer: number | null;
+  correct_index: number;
+  correct: boolean;
+  explanation: string;
+}
+export interface ContestDraft {
+  title: string;
+  topic: string;
+  description: string;
+  prize: string;
+  time_limit_seconds: number;
+  starts_at?: string;
+  ends_at: string;
+  questions: { question: string; options: string[]; answer_index: number; explanation: string }[];
+}
+export const fetchContests = (mine = false) => request<Contest[]>(`/api/contests${mine ? '?mine=true' : ''}`);
+export const fetchContest = (id: number | string) => request<Contest>(`/api/contests/${id}`);
+export const startContest = (id: number | string) => post<ContestStart>(`/api/contests/${id}/start`);
+export const submitContest = (id: number | string, answers: number[]) =>
+  post<ContestSubmitResult>(`/api/contests/${id}/submit`, { answers });
+export const fetchContestLeaderboard = (id: number | string) => request<ContestLeaderboard>(`/api/contests/${id}/leaderboard`);
+export const fetchContestReview = (id: number | string) => request<ContestReviewItem[]>(`/api/contests/${id}/review`);
+export const createContest = (draft: ContestDraft) => post<Contest>('/api/contests', draft);
 
 export const fetchNotifications = () =>
   request<{ items: BackendNotification[]; unread_count: number }>('/api/notifications');

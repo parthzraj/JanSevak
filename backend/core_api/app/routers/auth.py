@@ -1,9 +1,11 @@
+import hmac
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import (
     create_access_token,
@@ -36,11 +38,22 @@ def register(body: UserRegister, db: Session = Depends(get_db)):
     if _find_by_email(db, body.email):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email is already registered")
 
+    role = "citizen"
+    if body.account_type == "ngo":
+        expected = settings.NGO_SIGNUP_CODE
+        if not expected or not hmac.compare_digest((body.ngo_code or "").encode(), expected.encode()):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="NGO sign-up needs a valid NGO code from the JanSevak team",
+            )
+        role = "ngo"
+
     user = User(
         name=body.name,
         email=body.email.lower(),
         password_hash=hash_password(body.password),
         ward=body.ward,
+        role=role,
     )
     db.add(user)
     try:

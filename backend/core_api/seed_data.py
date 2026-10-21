@@ -1,4 +1,4 @@
-"""Load demo data: 3 citizens, 1 municipal official and 5 civic complaints.
+"""Load demo data: 3 citizens, 1 municipal official, 1 NGO, 5 civic complaints and 1 live contest.
 
     python seed_data.py            # add demo data (safe to run twice)
     python seed_data.py --reset    # wipe ALL tables first, then seed
@@ -8,6 +8,7 @@ Demo logins (password for all: demo123)
     priya@example.com   Silver   180 pts
     rahul@example.com   Bronze    40 pts
     official@example.com         municipal official (can change issue status)
+    ngo@example.com              NGO (can publish quiz contests)
 """
 import json
 import sys
@@ -22,6 +23,7 @@ from app.core.database import Base, SessionLocal, create_all_tables, engine, utc
 from app.core.security import hash_password  # noqa: E402
 from app.models import (  # noqa: E402
     CivicIssue,
+    Contest,
     IssueComment,
     IssueTimelineEvent,
     IssueVote,
@@ -44,6 +46,7 @@ USERS = [
     ("Priya Nair", "priya@example.com", "Ward 112 - Indiranagar", 180, "citizen"),
     ("Rahul Verma", "rahul@example.com", "Ward 85 - Koramangala", 40, "citizen"),
     ("BBMP Ward Officer", "official@example.com", "Ward 112 - Indiranagar", 0, "official"),
+    ("Green Ward Foundation", "ngo@example.com", "Ward 112 - Indiranagar", 0, "ngo"),
 ]
 
 # reporter email, title, description, category, priority, address, lat, lng, status, upvote_by
@@ -174,6 +177,23 @@ def main() -> None:
             users[rep].reports_count += 1
             created += 1
             print(f"  + issue {title}")
+
+        if not db.scalar(select(Contest.id)):
+            from app.services.quiz_bank import QUIZ_BY_ID
+
+            q = QUIZ_BY_ID["quiz-1"]["questions"]
+            db.add(Contest(
+                ngo_id=users["ngo@example.com"].id,
+                title="Segregation Showdown",
+                topic="Sanitation",
+                description="Show how well you know wet, dry and hazardous waste. Top three win bonus points and a goodie bag.",
+                prize="Reusable cloth bag + seed kit from Green Ward Foundation (top 3)",
+                questions=json.dumps(q),
+                time_limit_seconds=180,
+                starts_at=utcnow() - timedelta(hours=1),
+                ends_at=utcnow() + timedelta(days=7),
+            ))
+            print("  + contest Segregation Showdown")
 
         db.commit()
         print(f"\nDone. {created} issue(s) added. Demo password for every account: {PASSWORD}")

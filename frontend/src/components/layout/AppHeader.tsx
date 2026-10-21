@@ -1,13 +1,13 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, Bell, Trophy, ShieldCheck, Search, Sun, Moon } from 'lucide-react';
+import { Bell, Trophy, ShieldCheck, Search, Sun, Moon } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Avatar } from '../common/Avatar';
 
 export const AppHeader: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, unreadNotificationsCount, toggleSidebar, theme, toggleTheme } = useApp();
+  const { user, unreadNotificationsCount, theme, toggleTheme } = useApp();
 
   const isSearchActive = location.pathname === '/search';
   const isNotificationsActive = location.pathname === '/notifications';
@@ -20,39 +20,15 @@ export const AppHeader: React.FC = () => {
       <div className="h-1 w-full bg-gradient-to-r from-[#ea580c] via-white to-[#0b6623]" />
 
       <div className="flex items-center justify-between max-w-full px-3 sm:px-4 py-2">
-        {/* Left: 3 Horizontal Lines (Hamburger Menu) & JanSevak Emblem */}
+        {/* Left: app logo */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={toggleSidebar}
-            className="p-1.5 rounded-xl text-[#0f2d59] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all focus:outline-none cursor-pointer"
-            aria-label="Open navigation menu"
-            title="Menu"
-          >
-            <Menu className="w-5 h-5 stroke-[2.3]" />
-          </button>
-
           <button
             onClick={() => navigate('/home')}
             className="flex items-center gap-2 group text-left focus:outline-none cursor-pointer"
             title="Home - JanSevak Civic Portal"
             aria-label="JanSevak Home"
           >
-            {/* Government Official Crest Badge */}
-            <div className="w-8 h-8 rounded-lg bg-[#0f2d59] border border-[#d4af37]/60 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform relative overflow-hidden">
-              <svg
-                className="w-4 h-4 text-[#fbbf24]"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 2L4 5v6.5C4 17 7.5 21 12 22c4.5-1 8-5 8-10.5V5l-8-3z" />
-                <path d="M12 7v8" />
-                <path d="M8 11h8" />
-              </svg>
-            </div>
+            <img src="/logo.png" alt="JanSevak logo" className="w-9 h-9 rounded-lg object-contain group-hover:scale-105 transition-transform" />
             <div className="leading-tight">
               <span className="font-black text-sm text-[#0f2d59] dark:text-white tracking-tight block">JanSevak</span>
               <span className="text-[9px] font-bold text-[#ea580c] uppercase tracking-wider block">Civic OS</span>

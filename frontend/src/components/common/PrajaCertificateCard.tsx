@@ -25,7 +25,7 @@ export const PRAJA_CERTIFICATES: PrajaCertificateData[] = [
     slogan: 'CLEAN · GREEN · SUSTAINABLE',
     theme: 'green',
     description:
-      'for actively reporting 10+ civic issues on PrajaPulse and helping build a cleaner, safer and better community.',
+      'for actively reporting 10+ civic issues on JanSevak and helping build a cleaner, safer and better community.',
     shortSummary:
       'For actively reporting civic issues and helping improve your locality.',
   },
@@ -181,7 +181,7 @@ export const PrajaCertificateCard: React.FC<PrajaCertificateCardProps> = ({
 
       {/* TOP ROW: Header Branding */}
       <div className="relative z-10 flex items-center justify-between px-1">
-        {/* Left: PrajaPulse Emblem & Logo */}
+        {/* Left: JanSevak Emblem & Logo */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#0f2d59] text-white flex items-center justify-center shrink-0 shadow-2xs">
             <svg className="w-4 h-4 sm:w-4.5 sm:h-4.5 fill-current" viewBox="0 0 24 24">
@@ -190,7 +190,7 @@ export const PrajaCertificateCard: React.FC<PrajaCertificateCardProps> = ({
           </div>
           <div>
             <span className="text-xs sm:text-sm font-black tracking-tight text-[#0f2d59] block leading-none">
-              PrajaPulse
+              JanSevak
             </span>
             <span className="text-[8px] sm:text-[9px] text-[#4A7C59] font-medium leading-none block mt-0.5">
               Fix Your City Together
@@ -339,10 +339,10 @@ export const PrajaCertificateCard: React.FC<PrajaCertificateCardProps> = ({
           </svg>
         </div>
 
-        {/* Right: PrajaPulse Team */}
+        {/* Right: JanSevak Team */}
         <div className="text-right">
           <span className="text-[8px] sm:text-[10px] font-black text-[#113C25] block leading-none">
-            PrajaPulse Team
+            JanSevak Team
           </span>
           <span className="text-[7px] sm:text-[8px] text-[#4A7C59] font-medium leading-none block mt-0.5">
             Fix Your City Together
@@ -497,7 +497,7 @@ export const CertificateScrollCard: React.FC<CertificateScrollCardProps> = ({
                   isBlue ? 'text-[#1E3A8A]' : 'text-[#0f2d59]'
                 }`}
               >
-                PrajaPulse
+                JanSevak
               </span>
               <span
                 className={`text-[7px] sm:text-[8px] font-medium leading-none block mt-0.5 ${

@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     STRICT_REPORT_RULES: bool = True
     MAX_REPORTS_PER_DAY: int = 10  # per user per calendar day, 0 = unlimited
 
+    # NGO accounts can publish contests. Sign-up needs this code; empty = NGO sign-up is closed
+    # (the seeded demo NGO still works).
+    NGO_SIGNUP_CODE: str = ""
+
     DAILY_POINTS_CAP: int = 60
     DAY_RESET_TZ: str = "Asia/Kolkata"
 

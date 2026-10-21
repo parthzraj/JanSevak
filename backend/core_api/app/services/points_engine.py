@@ -37,9 +37,9 @@ POINTS: dict[str, int] = {
 }
 
 # Actions a *client* may claim itself (the server cannot verify them any other way).
+# Quizzes are no longer here: the server grades them (see routers/quizzes.py).
 # Value = (min, max) points the client may ask for.
 CLIENT_CLAIMABLE: dict[str, tuple[int, int]] = {
-    "quiz": (10, 25),
     "academy_module": (15, 60),
 }
 
@@ -94,6 +94,10 @@ def today_bounds_utc(now: datetime | None = None) -> tuple[datetime, datetime]:
     return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
 
+# Contest prizes are paid outside the daily cap, so they must not eat into it either.
+UNCAPPED_ACTIONS = ("contest_play", "contest_win")
+
+
 def points_earned_today(db: Session, user_id: int) -> int:
     """Positive points awarded today. Reversals are NOT subtracted, so
     earn-then-undo cycles can't be used to free up cap room."""
@@ -102,6 +106,7 @@ def points_earned_today(db: Session, user_id: int) -> int:
         select(func.coalesce(func.sum(RewardTransaction.points), 0)).where(
             RewardTransaction.user_id == user_id,
             RewardTransaction.points > 0,
+            RewardTransaction.action_type.notin_(UNCAPPED_ACTIONS),
             RewardTransaction.created_at >= start,
             RewardTransaction.created_at < end,
         )
@@ -138,8 +143,11 @@ def award_points(
     action_id: str | int,
     points: int | None = None,
     description: str = "",
+    respect_cap: bool = True,
 ) -> AwardResult:
-    """Credit `user` for an action, honouring dedup and the daily cap."""
+    """Credit `user` for an action, honouring dedup and (unless respect_cap=False) the daily cap.
+
+    respect_cap=False is only for one-off prizes (contest winnings), never for routine actions."""
     requested = POINTS[action_type] if points is None else points
     action_id = str(action_id)
 
@@ -153,7 +161,7 @@ def award_points(
     if already is not None:
         return AwardResult(requested=requested, awarded=0, duplicate=True)
 
-    remaining = max(0, settings.DAILY_POINTS_CAP - points_earned_today(db, user.id))
+    remaining = max(0, settings.DAILY_POINTS_CAP - points_earned_today(db, user.id)) if respect_cap else requested
     awarded = max(0, min(requested, remaining))
     capped = awarded < requested
 

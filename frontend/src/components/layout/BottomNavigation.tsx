@@ -145,7 +145,6 @@ export const BottomNavigation: React.FC = () => {
               isActive('/games') ||
               isActive('/report-analysis') ||
               isActive('/learn-certify') ||
-              isActive('/badges-certificates') ||
               isActive('/rewards')
                 ? 'text-[#0f2d59] dark:text-blue-400'
                 : 'text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white'

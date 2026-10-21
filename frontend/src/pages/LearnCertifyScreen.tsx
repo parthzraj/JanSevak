@@ -200,7 +200,7 @@ export const LearnCertifyScreen: React.FC = () => {
                 <button
                   onClick={() => {
                     setActiveModule(null);
-                    navigate('/badges-certificates');
+                    navigate('/rewards?tab=certificates');
                   }}
                   className="w-full py-2 bg-[#0f2d59] text-white text-xs font-bold rounded-xl"
                 >
