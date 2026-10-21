@@ -34,6 +34,10 @@ POINTS: dict[str, int] = {
     "cleanup": 40,  # organised a cleanup drive
     "volunteer_drive": 25,  # volunteer drive participation
     "volunteer_attend": 20,
+    # Paid only after a human (the organiser / the NGO) confirms the work happened:
+    "campaign_attend": 30,  # attended a civic drive (confirmed by its organiser)
+    "campaign_host": 20,  # base for organising a drive; the router adds 10 per confirmed volunteer (max 80)
+    "vacancy_complete": 40,  # finished an NGO volunteering role (confirmed by the NGO)
 }
 
 # Actions a *client* may claim itself (the server cannot verify them any other way).
@@ -94,8 +98,27 @@ def today_bounds_utc(now: datetime | None = None) -> tuple[datetime, datetime]:
     return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
 
-# Contest prizes are paid outside the daily cap, so they must not eat into it either.
-UNCAPPED_ACTIONS = ("contest_play", "contest_win")
+# Contest prizes and confirmed volunteering are paid outside the daily cap, so they must not eat into it either.
+# Volunteering is throttled separately (MAX_VOLUNTEER_REWARDS_PER_WEEK) so it cannot be farmed.
+VOLUNTEER_ACTIONS = ("campaign_attend", "campaign_host", "vacancy_complete")
+UNCAPPED_ACTIONS = ("contest_play", "contest_win") + VOLUNTEER_ACTIONS
+MAX_VOLUNTEER_REWARDS_PER_WEEK = 3
+
+
+def volunteer_rewards_this_week(db: Session, user_id: int) -> int:
+    """How many paid volunteering rewards the user got in the last 7 days."""
+    since = utcnow() - timedelta(days=7)
+    return int(
+        db.scalar(
+            select(func.count(RewardTransaction.id)).where(
+                RewardTransaction.user_id == user_id,
+                RewardTransaction.action_type.in_(VOLUNTEER_ACTIONS),
+                RewardTransaction.points > 0,
+                RewardTransaction.created_at >= since,
+            )
+        )
+        or 0
+    )
 
 
 def points_earned_today(db: Session, user_id: int) -> int:

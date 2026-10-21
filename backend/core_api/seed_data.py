@@ -22,6 +22,8 @@ from sqlalchemy import select  # noqa: E402
 from app.core.database import Base, SessionLocal, create_all_tables, engine, utcnow  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.models import (  # noqa: E402
+    Campaign,
+    CampaignMember,
     CivicIssue,
     Contest,
     IssueComment,
@@ -29,6 +31,7 @@ from app.models import (  # noqa: E402
     IssueVote,
     RewardTransaction,
     User,
+    Vacancy,
 )
 from app.services.points_engine import tier_for  # noqa: E402
 
@@ -194,6 +197,35 @@ def main() -> None:
                 ends_at=utcnow() + timedelta(days=7),
             ))
             print("  + contest Segregation Showdown")
+
+        ngo = users["ngo@example.com"]
+        if not db.scalar(select(Vacancy.id)):
+            db.add_all([
+                Vacancy(ngo_id=ngo.id, title="Weekend clean-up volunteers", role_type="Volunteer",
+                        description="Join our weekly lake-side clean-up crew. Gloves and bags are provided; we sort the waste for recycling together.",
+                        location="Ulsoor Lake, Bengaluru", commitment="3 hrs every Saturday", skills="No experience needed", slots=15,
+                        deadline=utcnow() + timedelta(days=30)),
+                Vacancy(ngo_id=ngo.id, title="Community outreach intern", role_type="Internship",
+                        description="Help us run awareness sessions in schools and resident associations about waste segregation and water saving.",
+                        location="Indiranagar, Bengaluru", commitment="8 hrs / week for 2 months", skills="Good communication, Kannada or Hindi", slots=3,
+                        deadline=utcnow() + timedelta(days=21)),
+            ])
+            print("  + 2 vacancies")
+        if not db.scalar(select(Campaign.id)):
+            pothole = db.scalar(select(CivicIssue).where(CivicIssue.title.like("Deep pothole%")))
+            camp_ngo = Campaign(organiser_id=ngo.id, title="Ulsoor Lake Plastic-Free Sunday", kind="Cleanup",
+                                description="Bring a bag and a friend. We will clear plastic from the lake edge and sort it for recycling.",
+                                address="Ulsoor Lake, Bengaluru", starts_at=utcnow() + timedelta(days=3, hours=2),
+                                ends_at=utcnow() + timedelta(days=3, hours=5), volunteers_needed=40)
+            camp_citizen = Campaign(organiser_id=users["ayush@example.com"].id, issue_id=pothole.id if pothole else None,
+                                    title="Fill the 12th Main pothole together", kind="Repair",
+                                    description="We will mark the pothole, warn traffic and push for BBMP cold-mix material. Come with cones or reflective tape if you have them.",
+                                    address="12th Main Road, Indiranagar", starts_at=utcnow() + timedelta(days=1, hours=1),
+                                    ends_at=utcnow() + timedelta(days=1, hours=3), volunteers_needed=12)
+            db.add_all([camp_ngo, camp_citizen])
+            db.flush()
+            db.add(CampaignMember(campaign_id=camp_citizen.id, user_id=users["priya@example.com"].id))
+            print("  + 2 campaigns")
 
         db.commit()
         print(f"\nDone. {created} issue(s) added. Demo password for every account: {PASSWORD}")

@@ -99,6 +99,9 @@ ACTION_LABELS = {
     "cleanup": "Cleanups organised",
     "volunteer_drive": "Volunteer drives",
     "volunteer_attend": "Cleanups attended",
+    "campaign_host": "Civic drives organised",
+    "campaign_attend": "Civic drives attended",
+    "vacancy_complete": "NGO volunteering completed",
     "quiz": "Quizzes passed",
     "academy_module": "Academy modules",
 }

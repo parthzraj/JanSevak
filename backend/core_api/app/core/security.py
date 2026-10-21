@@ -81,5 +81,5 @@ def require_official(user: User = Depends(get_current_user)) -> User:
 
 def require_ngo(user: User = Depends(get_current_user)) -> User:
     if user.role not in ("ngo", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only NGO accounts can publish contests")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only NGO accounts can do this")
     return user
