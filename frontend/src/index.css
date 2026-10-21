@@ -98,7 +98,8 @@ html.dark body {
   border-color: #1e293b;
 }
 
-.dark .text-\[\#0f172a\] {
+.dark .text-\[\#0f172a\],
+.dark .text-\[\#0F172A\] {
   color: #f8fafc;
 }
 
@@ -115,6 +116,7 @@ html.dark body {
 }
 
 .dark .text-\[\#64748b\],
+.dark .text-\[\#64748B\],
 .dark .text-slate-600,
 .dark .text-\[\#98A59E\] {
   color: #94a3b8;
@@ -331,3 +333,91 @@ html.theme-switching *::before,
 html.theme-switching *::after {
   transition: none !important;
 }
+
+/* ---- Glass look -----------------------------------------------------------------------------------------
+   Phone-width column only. A deep-green scene (soft mint in light mode) with the faint civic doodles, and frosted
+   tiles: a light-to-clear sheen, a thin edge highlight and a diffuse shadow, so tiles sit in the scene. */
+.app-doodle {
+  background-image:
+    radial-gradient(110% 38% at 88% 0%, rgba(74, 222, 128, 0.30), transparent 62%),
+    radial-gradient(90% 45% at 0% 100%, rgba(45, 212, 191, 0.24), transparent 66%),
+    linear-gradient(rgba(233, 247, 239, 0.82), rgba(218, 240, 229, 0.86)),
+    url('/bg-doodle.jpg');
+  background-size: auto, auto, auto, 520px auto;
+  background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+  background-attachment: scroll;
+}
+html.dark .app-doodle {
+  background-image:
+    radial-gradient(110% 38% at 88% 0%, rgba(74, 222, 128, 0.34), transparent 60%),
+    radial-gradient(90% 45% at 0% 100%, rgba(16, 185, 129, 0.24), transparent 66%),
+    linear-gradient(rgba(8, 58, 40, 0.88), rgba(3, 24, 16, 0.92)),
+    url('/bg-doodle-dark.jpg');
+}
+
+/* Tiles. Pop-ups (fixed overlays) are left solid. */
+.app-feed .bg-white:not(.fixed *):not(.fixed),
+.app-feed .bg-\[\#f8fafc\]:not(.fixed *):not(.fixed) {
+  background-color: transparent;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.80), rgba(255, 255, 255, 0.40) 70%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 8px 28px rgba(6, 78, 59, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+/* tiles nested inside a tile: a lighter wash, no second blur or shadow */
+.app-feed .bg-white .bg-\[\#f8fafc\]:not(.fixed *),
+.app-feed .bg-\[\#f8fafc\] .bg-white:not(.fixed *) {
+  background-image: none;
+  background-color: rgba(255, 255, 255, 0.5);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  border-color: rgba(148, 163, 184, 0.35);
+}
+html.dark .app-feed .bg-white:not(.fixed *):not(.fixed),
+html.dark .app-feed .bg-\[\#f8fafc\]:not(.fixed *):not(.fixed) {
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04) 65%);
+  border-color: rgba(255, 255, 255, 0.17);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+html.dark .app-feed .bg-white .bg-\[\#f8fafc\]:not(.fixed *),
+html.dark .app-feed .bg-\[\#f8fafc\] .bg-white:not(.fixed *) {
+  background-image: none;
+  background-color: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+
+/* Top bar and a floating bottom bar, same glass */
+.app-doodle header.sticky,
+.app-doodle [class*="fixed bottom-0"] {
+  background-color: transparent;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.58));
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  border-color: rgba(255, 255, 255, 0.85);
+}
+.app-doodle [class*="fixed bottom-0"] {
+  bottom: 10px;
+  width: calc(100% - 28px);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 30px;
+  box-shadow: 0 10px 30px rgba(6, 78, 59, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+html.dark .app-doodle header.sticky,
+html.dark .app-doodle [class*="fixed bottom-0"] {
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0.06));
+  background-color: rgba(4, 28, 19, 0.80);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+html.dark .app-doodle [class*="fixed bottom-0"] {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+/* Dark glass: keep coloured link text readable on the deep green */
+html.dark .app-feed .text-amber-700, html.dark .app-feed .text-amber-800, html.dark .app-feed .text-orange-700 { color: #fdba74; }
+html.dark .app-feed .text-blue-700, html.dark .app-feed .text-blue-800 { color: #93c5fd; }
+html.dark .app-feed .text-teal-700, html.dark .app-feed .text-emerald-700, html.dark .app-feed .text-emerald-800 { color: #6ee7b7; }
+html.dark .app-feed .text-purple-700, html.dark .app-feed .text-violet-700 { color: #c4b5fd; }
+html.dark .app-feed .border-slate-100 { border-color: rgba(255, 255, 255, 0.1); }

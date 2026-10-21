@@ -243,7 +243,7 @@ export const ProfileScreen: React.FC = () => {
               <span>Profile {completeness}% complete</span>
               <span>Helps officials reach you</span>
             </div>
-            <div className="h-1.5 rounded-full bg-[#e2e8f0] overflow-hidden">
+            <div className="h-1.5 rounded-full bg-[#e2e8f0] dark:bg-slate-700 overflow-hidden">
               <div className="h-full rounded-full bg-[#0f2d59]" style={{ width: `${completeness}%` }} />
             </div>
           </div>

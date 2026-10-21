@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, ShieldCheck, Sparkles, ArrowRight, UserCheck, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, UserCheck, CheckCircle2, Camera, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const LoginScreen: React.FC = () => {
@@ -39,58 +39,41 @@ export const LoginScreen: React.FC = () => {
   const handleGuestAccess = () => finish(() => login('rahul@example.com', 'demo123'));
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col justify-between p-4 sm:p-6 max-w-md mx-auto w-full">
-      {/* Top Branding Section */}
-      <div className="pt-4 flex flex-col items-center text-center">
-        {/* Brand Icon Badge */}
-        <img src="/logo.png" alt="JanSevak logo" className="w-24 h-24 object-contain mb-2" />
+    <div className="min-h-screen flex flex-col justify-between p-4 sm:p-6 max-w-md mx-auto w-full">
+      {/* Top Branding Section: logo in a bordered tile, name in a bordered plate */}
+      <div className="pt-6 flex flex-col items-center text-center">
+        <div className="w-28 h-28 rounded-[32px] bg-white border-[3px] border-[#0f2d59] dark:border-blue-400 shadow-lg shadow-[#0f2d59]/20 p-2 flex items-center justify-center">
+          <img src="/logo.png" alt="JanSevak logo" className="w-full h-full object-contain rounded-3xl" />
+        </div>
 
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0f172a] tracking-tight">
+        <h1 className="mt-4 px-6 py-1.5 rounded-2xl bg-white border-2 border-[#0f2d59] dark:border-blue-400 text-2xl sm:text-3xl font-extrabold text-[#0f2d59] tracking-tight shadow-md shadow-[#0f2d59]/15">
           JanSevak
         </h1>
-        <p className="text-xs sm:text-sm font-semibold text-[#0f2d59] mt-1 tracking-wide">
-          Your City. Your Voice. Your Impact.
-        </p>
-        <p className="text-xs text-[#64748b] mt-1 max-w-xs">
-          A modern citizen engagement platform to report civic issues and celebrate positive local impact.
-        </p>
+        <div className="mt-3 px-4 py-2 rounded-2xl bg-white/75 dark:bg-[#0b1a30]/85 backdrop-blur-sm">
+          <p className="text-xs sm:text-sm font-bold text-[#0f2d59] dark:text-blue-200 tracking-wide">Your City. Your Voice. Your Impact.</p>
+          <p className="text-xs text-[#475569] dark:text-slate-300 mt-0.5 max-w-xs">Report civic issues, back your neighbours, and watch problems get resolved.</p>
+        </div>
       </div>
 
-      {/* Welcoming Civic Illustration Banner */}
-      <div className="my-4 p-4 rounded-3xl bg-gradient-to-br from-[#eff6ff] via-[#edf8f1] to-white border border-[#1d4e8c]/20 shadow-xs relative overflow-hidden">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-[#0f2d59] text-white flex items-center justify-center shrink-0 shadow-md">
-            <Sparkles className="w-6 h-6 text-[#d97706]" />
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-[#0f2d59] uppercase tracking-wider block">
-              Citizen Power in Action
+      {/* How it works: three steps, no made-up numbers */}
+      <div className="my-5 grid grid-cols-3 gap-2 text-center">
+        {[
+          { Icon: Camera, label: 'Report', hint: 'Snap the problem' },
+          { Icon: Users, label: 'Support', hint: 'Back your ward' },
+          { Icon: CheckCircle2, label: 'Resolved', hint: 'See the result' },
+        ].map(({ Icon, label, hint }) => (
+          <div key={label} className="bg-white/90 dark:bg-[#111c2e]/90 backdrop-blur-sm rounded-2xl p-2.5 border border-[#0f2d59]/25 dark:border-blue-400/30 shadow-xs">
+            <span className="w-8 h-8 rounded-xl bg-[#0f2d59] dark:bg-blue-600 text-white flex items-center justify-center mx-auto">
+              <Icon className="w-4 h-4" />
             </span>
-            <p className="text-xs font-semibold text-[#0f172a]">
-              Over 1,400+ neighborhood problems resolved together this month!
-            </p>
+            <span className="block text-xs font-extrabold text-[#0f2d59] dark:text-blue-200 mt-1.5">{label}</span>
+            <span className="block text-[10px] text-[#64748b] dark:text-slate-400 leading-tight">{hint}</span>
           </div>
-        </div>
-
-        {/* Small Visual Civic Chips */}
-        <div className="grid grid-cols-3 gap-1.5 mt-3 pt-3 border-t border-[#0f2d59]/10 text-center">
-          <div className="bg-white/80 rounded-xl p-1.5 border border-[#0f2d59]/10">
-            <span className="text-[10px] text-[#64748b] block">Speed</span>
-            <span className="text-xs font-bold text-[#0f2d59]">Avg 38h</span>
-          </div>
-          <div className="bg-white/80 rounded-xl p-1.5 border border-[#0f2d59]/10">
-            <span className="text-[10px] text-[#64748b] block">Accuracy</span>
-            <span className="text-xs font-bold text-[#0f2d59]">94% Verified</span>
-          </div>
-          <div className="bg-white/80 rounded-xl p-1.5 border border-[#0f2d59]/10">
-            <span className="text-[10px] text-[#64748b] block">Rewards</span>
-            <span className="text-xs font-bold text-[#d97706]">Trophy Pts</span>
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* Main Login / Register Card */}
-      <div className="bg-white rounded-3xl p-5 border border-[#cbd5e1] shadow-sm">
+      <div className="bg-white rounded-3xl p-5 border-2 border-[#0f2d59]/25 dark:border-blue-400/30 shadow-lg shadow-[#0f2d59]/10">
         <div className="flex items-center justify-between mb-4 border-b border-[#cbd5e1] pb-3">
           <button
             type="button"
@@ -360,7 +343,7 @@ export const LoginScreen: React.FC = () => {
       )}
 
       {/* Footer Info */}
-      <div className="text-center py-2 text-[10px] text-[#64748b]">
+      <div className="text-center pt-4 pb-2 text-[10px] font-semibold text-[#475569]">
         <p>JanSevak Civic Network · Mobile Prototype Demo</p>
       </div>
     </div>

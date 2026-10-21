@@ -20,7 +20,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   if (isLoginPage) {
     return (
-      <div className="min-h-screen bg-[#f8fafc] dark:bg-[#0b1120] text-[#0f172a] dark:text-slate-100 flex flex-col justify-center">
+      <div className="app-doodle min-h-screen bg-[#e9f7fd] dark:bg-[#0b1120] text-[#0f172a] dark:text-slate-100 flex flex-col justify-center">
         <ToastContainer />
         {children}
         {/* Floating Chatbot present on every screen */}
@@ -32,7 +32,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   return (
     <div className="min-h-screen bg-[#e2e8f0] dark:bg-[#030712] flex justify-center text-[#0f172a] dark:text-slate-100 transition-colors duration-250">
       {/* Phone container shell: max-w-lg on larger screens with subtle border and elevation */}
-      <div className="w-full max-w-lg min-h-screen bg-[#f8fafc] dark:bg-[#0b1120] relative flex flex-col shadow-2xl border-x border-[#cbd5e1] dark:border-slate-800 transition-colors duration-250">
+      <div className="app-doodle w-full max-w-lg min-h-screen bg-[#e9f7fd] dark:bg-[#0b1120] relative flex flex-col shadow-2xl border-x border-[#cbd5e1] dark:border-slate-800 transition-colors duration-250">
         <ToastContainer />
         <PostDetailModal />
         <CommentsSheet />
@@ -43,7 +43,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         {!isReelsPage && <AppHeader />}
 
         {/* Main Content Area with bottom safe padding */}
-        <main className={`flex-1 flex flex-col ${isReelsPage ? 'pb-16' : 'pb-24'}`}>
+        <main className={`app-feed flex-1 flex flex-col ${isReelsPage ? 'pb-16' : 'pb-24'}`}>
           {children}
         </main>
 
