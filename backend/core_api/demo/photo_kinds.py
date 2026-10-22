@@ -30,4 +30,4 @@ KINDS: dict[str, tuple[str, tuple[int, int, int], list[str]]] = {
     "after_tree": ("Road cleared", (30, 110, 70), ["clear road after tree removal", "tree trimming road cleared", "pruned trees street"]),
 }
 
-VARIANTS = 3  # how many different pictures to keep per kind
+VARIANTS = 6  # how many different pictures to keep per kind

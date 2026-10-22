@@ -80,6 +80,9 @@ def _placeholder(kind: str, n: int) -> Image.Image:
     return img
 
 
+_WRITTEN: set[str] = set()  # names refreshed during this run
+
+
 def photo_url(kind: str, n: int = 1) -> str:
     """Store (once) and return the /uploads URL for picture `n` of `kind`."""
     if kind not in KINDS:
@@ -89,7 +92,8 @@ def photo_url(kind: str, n: int = 1) -> str:
     out_dir = Path(settings.UPLOAD_DIR)
     out_dir.mkdir(parents=True, exist_ok=True)
     target = out_dir / name
-    if not target.exists():
+    if name not in _WRITTEN:  # always refresh once per run, so stale placeholders never linger
+        _WRITTEN.add(name)
         src = _real_photo(kind, n)
         img = Image.open(src).convert("RGB") if src else _placeholder(kind, n)
         img.thumbnail((1280, 1280))

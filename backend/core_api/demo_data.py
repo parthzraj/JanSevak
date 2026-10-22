@@ -114,10 +114,15 @@ def build(db) -> None:
 
     # ------------------------------------------------------------------ reports
     issues: list[tuple[dict, CivicIssue]] = []
+    seen_before: dict[str, int] = {}  # every report gets its own picture slot within its category
+    seen_after: dict[str, int] = {}
     for r in REPORTS:
         lat0, lng0 = AREAS[r["area"]]
         created = ago(days=r["age"], hours=rnd.randint(1, 9))
-        kind, n = r["photo"]
+        kind = r["photo"][0]
+        seen_before[kind] = seen_before.get(kind, 0) + 1
+        n = seen_before[kind]
+        r["photo"] = (kind, n)
         issue = CivicIssue(
             title=r["title"], description=r["description"], category=r["category"], priority=r["priority"], status=r["status"],
             image_urls=json.dumps([photo_url(kind, n)]), address=r["address"],
@@ -125,7 +130,9 @@ def build(db) -> None:
             reporter_id=users[r["reporter"]].id, upvotes=0, created_at=created, updated_at=created,
         )
         if r["status"] == "Resolved":
-            days, note, after_kind, after_n = r["fix"]
+            days, note, after_kind, _ = r["fix"]
+            seen_after[after_kind] = seen_after.get(after_kind, 0) + 1
+            after_n = seen_after[after_kind]
             issue.resolved_at = min(created + timedelta(days=days, hours=rnd.randint(1, 8)), ago(hours=6))
             issue.resolution_image_urls = json.dumps([photo_url(after_kind, after_n)])
             issue.resolution_note = note
