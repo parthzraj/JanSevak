@@ -189,10 +189,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Briefing
   const [briefing] = useState<DailyBriefing>(INITIAL_BRIEFING);
 
-  // Daily Briefing Acknowledged State (per day)
-  const getBriefingKey = (date: Date = new Date(), userId = user.id) => {
+  // Daily Briefing Acknowledged State (per day & scoped strictly per user)
+  const getUserIdentifier = (u?: UserProfile | null) => {
+    const target = u !== undefined ? u : user;
+    return target?.id ? String(target.id) : (target?.email || 'guest');
+  };
+
+  const getBriefingKey = (date: Date = new Date(), userId?: string) => {
+    const uid = userId || getUserIdentifier();
     const today = date;
-    return `praja_briefing_ack_${userId}_${today.getFullYear()}_${today.getMonth() + 1}_${today.getDate()}`;
+    return `praja_briefing_ack_${uid}_${today.getFullYear()}_${today.getMonth() + 1}_${today.getDate()}`;
   };
 
   const [isBriefingAcknowledged, setIsBriefingAcknowledged] = useState<boolean>(() => {
@@ -204,41 +210,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [currentTime, setCurrentTime] = useState(() => new Date());
 
+  // Immediately re-evaluate briefing acknowledgment whenever the active user changes (e.g. login/logout)
   useEffect(() => {
     const refreshBriefingState = () => {
       const now = new Date();
       setCurrentTime(now);
+      const uid = getUserIdentifier();
+      const key = getBriefingKey(now, uid);
       try {
-        setIsBriefingAcknowledged(localStorage.getItem(getBriefingKey(now)) === 'true');
+        setIsBriefingAcknowledged(localStorage.getItem(key) === 'true');
       } catch {
         setIsBriefingAcknowledged(false);
       }
     };
 
     refreshBriefingState();
-    const refreshTimer = window.setInterval(refreshBriefingState, 30_000);
+    const refreshTimer = window.setInterval(refreshBriefingState, 15_000);
     return () => window.clearInterval(refreshTimer);
-  }, [user.id]);
+  }, [user?.id, user?.email]);
 
   const acknowledgeBriefing = useCallback(() => {
+    const uid = getUserIdentifier();
+    const key = getBriefingKey(new Date(), uid);
     try {
-      localStorage.setItem(getBriefingKey(), 'true');
+      localStorage.setItem(key, 'true');
     } catch {
       // The in-memory state still keeps the acknowledgement for this session.
     }
     setIsBriefingAcknowledged(true);
-  }, [user.id]);
+  }, [user?.id, user?.email]);
 
   const resetBriefingAcknowledgment = useCallback(() => {
+    const uid = getUserIdentifier();
+    const key = getBriefingKey(new Date(), uid);
     try {
-      localStorage.removeItem(getBriefingKey());
+      localStorage.removeItem(key);
     } catch {
       // Keep the in-memory state reset even if storage is unavailable.
     }
     setIsBriefingAcknowledged(false);
-  }, [user.id]);
+  }, [user?.id, user?.email]);
 
-  const isBriefingAvailable = currentTime.getHours() >= 7;
+  // 7 AM City Briefing is the morning municipal dispatch published for the full day
+  const isBriefingAvailable = true;
 
   // Notifications (safe parse)
   const [notifications, setNotifications] = useState<UserNotification[]>(() => {
@@ -416,8 +430,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const finishLogin = (res: BackendTokenResponse) => {
     setToken(res.access_token);
-    setUser(toUserProfile(res.user));
+    const nextUser = toUserProfile(res.user);
+    setUser(nextUser);
     setIsLoggedIn(true);
+    try {
+      const uid = nextUser.id ? String(nextUser.id) : (nextUser.email || 'guest');
+      const key = getBriefingKey(new Date(), uid);
+      setIsBriefingAcknowledged(localStorage.getItem(key) === 'true');
+    } catch {
+      setIsBriefingAcknowledged(false);
+    }
     addToast('Welcome, ' + res.user.name, 'Connected to JanSevak Bengaluru Network', 'success');
   };
 
@@ -444,6 +466,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = () => {
     setToken(null);
     setIsLoggedIn(false);
+    setUser(INITIAL_USER);
+    try {
+      localStorage.removeItem('prajapulse_user');
+      const uid = INITIAL_USER.id ? String(INITIAL_USER.id) : (INITIAL_USER.email || 'guest');
+      const key = getBriefingKey(new Date(), uid);
+      setIsBriefingAcknowledged(localStorage.getItem(key) === 'true');
+    } catch {
+      setIsBriefingAcknowledged(false);
+    }
     setNotifications([]);
     setPosts([]);
     addToast('Logged out successfully', 'See you soon!', 'info');
