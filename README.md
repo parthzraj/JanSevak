@@ -415,4 +415,13 @@ python -m pytest tests -q
 
 ---
 
+## Detailed Technical Guides
+
+- **[AI Features & Intelligence Architecture Guide (`AI_FEATURES.md`)](./AI_FEATURES.md)**: Comprehensive deep dive into all 12 AI modules, vision pipelines, prompt engineering, datasets, and defensive fallbacks.
+- **[Core API Architecture & Database Models](./backend/core_api/README.md)**: Backend services, ORM entities, and endpoint contracts.
+- **[AI Service Setup & Ollama Model Configuration](./backend/ai_service/README.md)**: Local LLM setup and vision models.
+
+---
+
 **JanSevak (PrajaPulse) — Empowering Citizens. Accelerating Governance. Driving Real Community Impact.**
+
