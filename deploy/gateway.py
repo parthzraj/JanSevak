@@ -54,7 +54,9 @@ async def forward(request: Request) -> Response:
         if is_ai(path):
             try:
                 # real AI first; a dead tunnel answers 5xx or does not connect at all
-                upstream = await send(request.method, AI_URL, request, headers, body, httpx.Timeout(180.0, connect=6.0))
+                # ngrok's free plan shows a "visit site" page to browser-like requests; this header skips it
+                ai_headers = {**headers, "ngrok-skip-browser-warning": "true"}
+                upstream = await send(request.method, AI_URL, request, ai_headers, body, httpx.Timeout(180.0, connect=6.0))
                 if upstream.status_code in (502, 503, 504, 520, 521, 522, 523, 524, 530) and AI_FALLBACK_URL:
                     upstream = None
             except httpx.HTTPError:
