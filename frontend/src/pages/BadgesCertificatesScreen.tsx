@@ -26,7 +26,7 @@ import {
   CertificateScrollCard,
   PrajaCertificateData,
 } from '../components/common/PrajaCertificateCard';
-import { PRINT_CSS, toPrajaCertificate, verifyLink } from '../components/academy/CertificateModal';
+import { PRINT_CSS, PrintCertificate, toPrajaCertificate, verifyLink } from '../components/academy/CertificateModal';
 import { fetchMyCertificates } from '../lib/academyApi';
 import { useMyBadges, useWallet } from '../lib/profileApi';
 
@@ -63,8 +63,13 @@ export const BadgesCertificatesScreen: React.FC = () => {
     );
   };
 
+  // The certificate being printed. Mounted on its own, so the download button on a list card prints just that one.
+  const [printCert, setPrintCert] = useState<PrajaCertificateData | null>(null);
+
   const handleDownloadCertificate = (cert?: PrajaCertificateData) => {
     const title = cert?.category || 'Civic Contribution';
+    if (cert) setPrintCert(cert);
+    window.addEventListener('afterprint', () => setPrintCert(null), { once: true });
     addToast(
       'Preparing PDF Download...',
       `Generating verified certificate for "${title}".`,
@@ -77,6 +82,8 @@ export const BadgesCertificatesScreen: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col px-3.5 sm:px-4 pt-3 pb-12 space-y-4 max-w-2xl mx-auto w-full">
+      <style>{PRINT_CSS}</style>
+      {printCert && <PrintCertificate certificate={printCert} userName={user.name} />}
       {/* ============================================================ */}
       {/* 1. TOP HEADER (Exact Match: < Rewards & Certificate 🍃)       */}
       {/* ============================================================ */}
@@ -358,7 +365,7 @@ export const BadgesCertificatesScreen: React.FC = () => {
 
             {/* Pop-Out Certificate Carousel */}
             <style>{PRINT_CSS}</style>
-            <div className="pt-2 print-certificate">
+            <div className="pt-2">
               <PopOutCertificateViewer
                 certificates={certList}
                 userName={user.name}

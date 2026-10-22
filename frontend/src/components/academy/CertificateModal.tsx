@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Copy, Download, Printer, ShieldCheck, X } from 'lucide-react';
 import { PrajaCertificateCard, type PrajaCertificateData } from '../common/PrajaCertificateCard';
 import { useApp } from '../../context/AppContext';
@@ -27,11 +28,42 @@ export function toPrajaCertificate(c: Certificate): PrajaCertificateData {
   };
 }
 
-export const PRINT_CSS = `@media print {
-  body * { visibility: hidden !important; }
-  .print-certificate, .print-certificate * { visibility: visible !important; }
-  .print-certificate { position: fixed !important; left: 0; right: 0; top: 10vh; margin: 0 auto; width: 90vw !important; max-width: 900px; }
+/**
+ * Print / Save-as-PDF output: ONLY the chosen certificate, alone on one landscape page.
+ * The certificate is drawn into its own #print-root (a child of <body>); while printing, everything else is
+ * removed from the layout (display:none, not just hidden), so no blank or repeated pages and no page chrome.
+ */
+export const PRINT_CSS = `
+#print-root { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 0; }
+  html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+  body > *:not(#print-root) { display: none !important; }
+  #print-root { display: flex !important; align-items: center; justify-content: center; width: 100vw; height: 100vh; padding: 14mm; box-sizing: border-box; }
+  #print-root > div { width: 100%; max-width: 250mm; }
+  #print-root, #print-root * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }`;
+
+/** Renders the certificate to print into <body>, outside the app layout. Mount it while a certificate is open. */
+export const PrintCertificate: React.FC<{ certificate: PrajaCertificateData; userName?: string }> = ({ certificate, userName }) => {
+  const [host] = React.useState(() => {
+    const el = document.createElement('div');
+    el.id = 'print-root';
+    return el;
+  });
+  React.useEffect(() => {
+    document.body.appendChild(host);
+    return () => {
+      document.body.removeChild(host);
+    };
+  }, [host]);
+  return createPortal(
+    <div>
+      <PrajaCertificateCard certificate={certificate} userName={userName} />
+    </div>,
+    host
+  );
+};
 
 /** Shows ONE certificate: the one for the course the learner just finished (or chose). */
 export const CertificateModal: React.FC<{ certificate: Certificate; onClose: () => void }> = ({ certificate, onClose }) => {
@@ -50,6 +82,7 @@ export const CertificateModal: React.FC<{ certificate: Certificate; onClose: () 
   return (
     <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3.5 overflow-y-auto" onClick={onClose}>
       <style>{PRINT_CSS}</style>
+      <PrintCertificate certificate={toPrajaCertificate(certificate)} userName={certificate.learner_name} />
       <div
         role="dialog"
         aria-modal="true"
@@ -60,7 +93,7 @@ export const CertificateModal: React.FC<{ certificate: Certificate; onClose: () 
         <button onClick={onClose} aria-label="Close" className="absolute top-3 right-3 p-2 rounded-full hover:bg-slate-100 text-slate-500 z-10 cursor-pointer">
           <X className="w-5 h-5" />
         </button>
-        <div className="pt-6 print-certificate">
+        <div className="pt-6">
           <PrajaCertificateCard certificate={toPrajaCertificate(certificate)} userName={certificate.learner_name} />
         </div>
 
