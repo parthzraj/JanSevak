@@ -1,0 +1,51 @@
+"""Demo people. Password for every account: demo123"""
+
+PASSWORD = "demo123"
+
+# key -> dict(name, email, ward, role, avatar, bio, optional contact details)
+PEOPLE = {
+    "ayush": dict(name="Ayush Sharma", email="ayush@example.com", ward="Ward 112 - Indiranagar", role="citizen", avatar="preset:man-1",
+                  bio="Software engineer. I report what I walk past every day.", phone="9876543210",
+                  address="Flat 4B, Sunrise Apartments, 12th Main Road", city="Bengaluru", pincode="560038"),
+    "priya": dict(name="Priya Nair", email="priya@example.com", ward="Ward 112 - Indiranagar", role="citizen", avatar="preset:woman-1",
+                  bio="School teacher and weekend park volunteer.", phone="9845012345",
+                  address="22, 5th Cross, Indiranagar", city="Bengaluru", pincode="560038"),
+    "rahul": dict(name="Rahul Verma", email="rahul@example.com", ward="Ward 85 - Koramangala", role="citizen", avatar="preset:man-2",
+                  bio="Cyclist. Streetlights and safe crossings are my cause.", phone="9731122334",
+                  address="No. 9, 80 Feet Road, Koramangala", city="Bengaluru", pincode="560034"),
+    "meera": dict(name="Meera Iyer", email="meera@example.com", ward="Ward 85 - Koramangala", role="citizen", avatar="preset:woman-2",
+                  bio="Resident welfare association secretary. If it floods, I have photos.", phone="9900776655",
+                  address="B-12, Lake View Layout, Koramangala", city="Bengaluru", pincode="560095"),
+    "arjun": dict(name="Arjun Reddy", email="arjun@example.com", ward="Ward 150 - HSR Layout", role="citizen", avatar="preset:man-3",
+                  bio="Civil engineering student, HSR Layout."),
+    "sneha": dict(name="Sneha Kulkarni", email="sneha@example.com", ward="Ward 150 - HSR Layout", role="citizen", avatar="preset:woman-3",
+                  bio="Doctor on night shifts. Dark streets matter to me."),
+    "imran": dict(name="Imran Sheikh", email="imran@example.com", ward="Ward 176 - Jayanagar", role="citizen", avatar="preset:man-1",
+                  bio="Runs a small hardware shop in Jayanagar 4th Block."),
+    "divya": dict(name="Divya Menon", email="divya@example.com", ward="Ward 176 - Jayanagar", role="citizen", avatar="preset:neutral-1",
+                  bio="Architect. Walkable streets, please."),
+    "karan": dict(name="Karan Malhotra", email="karan@example.com", ward="Ward 67 - Malleshwaram", role="citizen", avatar="preset:man-2",
+                  bio="Retired bank manager, daily walker."),
+    "lakshmi": dict(name="Lakshmi Narayanan", email="lakshmi@example.com", ward="Ward 67 - Malleshwaram", role="citizen", avatar="preset:woman-1",
+                    bio="Homemaker and composting enthusiast."),
+    "nikhil": dict(name="Nikhil Joshi", email="nikhil@example.com", ward="Ward 112 - Indiranagar", role="citizen", avatar="preset:man-3",
+                   bio="College student, Sunday clean-up regular."),
+    "ananya": dict(name="Ananya Rao", email="ananya@example.com", ward="Ward 85 - Koramangala", role="citizen", avatar="preset:woman-2",
+                   bio="Lake volunteer and amateur birder."),
+    "tara": dict(name="Tara Singh", email="tara@example.com", ward="Ward 150 - HSR Layout", role="citizen", avatar="preset:woman-3",
+                 bio="New to the neighbourhood, learning the ropes."),
+    "vikram": dict(name="Vikram Rao", email="vikram@example.com", ward="Ward 176 - Jayanagar", role="citizen", avatar="preset:man-1",
+                   bio="Joined last month."),
+    "zoya": dict(name="Zoya Khan", email="zoya@example.com", ward="Ward 67 - Malleshwaram", role="citizen", avatar="preset:neutral-2",
+                 bio="Photographer. Posts what she sees."),
+    "official": dict(name="BBMP Ward Officer", email="official@example.com", ward="Ward 112 - Indiranagar", role="official", avatar=None,
+                     bio="Municipal ward office: roads, lighting, sanitation and parks."),
+    "official2": dict(name="BWSSB Zonal Engineer", email="official2@example.com", ward="Ward 85 - Koramangala", role="official", avatar=None,
+                      bio="Water supply and sewerage, east zone."),
+    "ngo": dict(name="Green Ward Foundation", email="ngo@example.com", ward="Ward 112 - Indiranagar", role="ngo", avatar=None,
+                bio="Neighbourhood clean-ups, civic courses and quiz contests since 2019."),
+    "ngo2": dict(name="Clean Lake Collective", email="ngo2@example.com", ward="Ward 85 - Koramangala", role="ngo", avatar=None,
+                 bio="Volunteers who monitor and restore city lakes."),
+}
+
+CITIZENS = [k for k, v in PEOPLE.items() if v["role"] == "citizen"]
