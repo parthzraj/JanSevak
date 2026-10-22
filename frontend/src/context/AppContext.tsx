@@ -196,9 +196,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [briefing] = useState<DailyBriefing>(INITIAL_BRIEFING);
 
   // Daily Briefing Acknowledged State (per day)
-  const getBriefingKey = (date: Date = new Date()) => {
+  const getBriefingKey = (date: Date = new Date(), userId = user.id) => {
     const today = date;
-    return `praja_briefing_ack_${today.getFullYear()}_${today.getMonth() + 1}_${today.getDate()}`;
+    return `praja_briefing_ack_${userId}_${today.getFullYear()}_${today.getMonth() + 1}_${today.getDate()}`;
   };
 
   const [isBriefingAcknowledged, setIsBriefingAcknowledged] = useState<boolean>(() => {
@@ -224,7 +224,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshBriefingState();
     const refreshTimer = window.setInterval(refreshBriefingState, 30_000);
     return () => window.clearInterval(refreshTimer);
-  }, []);
+  }, [user.id]);
 
   const acknowledgeBriefing = useCallback(() => {
     try {
@@ -233,7 +233,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // The in-memory state still keeps the acknowledgement for this session.
     }
     setIsBriefingAcknowledged(true);
-  }, []);
+  }, [user.id]);
 
   const resetBriefingAcknowledgment = useCallback(() => {
     try {
@@ -242,7 +242,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Keep the in-memory state reset even if storage is unavailable.
     }
     setIsBriefingAcknowledged(false);
-  }, []);
+  }, [user.id]);
 
   const isBriefingAvailable = currentTime.getHours() >= 7;
 
