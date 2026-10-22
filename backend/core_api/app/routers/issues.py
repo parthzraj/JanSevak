@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db, utcnow
 from app.core.security import get_current_user, get_optional_user, require_official
-from app.models.issue import CivicIssue, IssueComment, IssueEvidence, IssueTimelineEvent, IssueVote
+from app.models.issue import (
+    CivicIssue,
+    ImpactReaction,
+    ImpactShare,
+    IssueComment,
+    IssueEvidence,
+    IssueTimelineEvent,
+    IssueVote,
+)
 from app.models.user import User
 from app.schemas.issue import (
     STATUS_ORDER,
@@ -260,12 +268,13 @@ def delete_issue(issue_id: int, user: User = Depends(get_current_user), db: Sess
             .where(User.id.in_(voter_ids))
             .values(supported_count=case((User.supported_count > 0, User.supported_count - 1), else_=0))
         )
-    files = list(issue.images) + [e.image_url for e in issue.evidence]
-    for model in (IssueVote, IssueComment, IssueTimelineEvent, IssueEvidence):
+    files = list(issue.images) + list(issue.resolution_images) + [e.image_url for e in issue.evidence]
+    for model in (IssueVote, IssueComment, IssueTimelineEvent, IssueEvidence, ImpactReaction, ImpactShare):
         db.execute(delete(model).where(model.issue_id == issue.id))
     # keep an empty, hidden tombstone: the id must never be handed out again
     issue.deleted_at = utcnow()
     issue.title, issue.description, issue.image_urls, issue.address = "[deleted]", "[deleted]", "[]", None
+    issue.resolution_image_urls, issue.resolution_note = "[]", None
     issue.latitude = issue.longitude = None
     issue.upvotes = 0
     db.commit()
@@ -304,6 +313,10 @@ def update_status(
         )
 
     issue.status = body.status
+    if body.status == "Resolved":
+        issue.resolved_at = utcnow()
+        issue.resolution_note = body.note
+        issue.resolution_image_urls = json.dumps(body.after_image_urls)
     db.add(IssueTimelineEvent(issue_id=issue.id, status=body.status, note=body.note, actor_id=official.id))
     notify(db, issue.reporter_id, "Issue status updated", f"'{issue.title}' is now {body.status}.", "status")
 

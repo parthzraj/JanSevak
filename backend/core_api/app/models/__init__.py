@@ -1,6 +1,6 @@
 from app.models.academy import Course, Enrollment, Lesson, LessonProgress
 from app.models.contest import Contest, ContestEntry
-from app.models.issue import CivicIssue, IssueComment, IssueEvidence, IssueTimelineEvent, IssueVote
+from app.models.issue import CivicIssue, IssueComment, IssueEvidence, ImpactReaction, ImpactShare, IssueTimelineEvent, IssueVote
 from app.models.notification import Notification
 from app.models.quiz import QuizAttempt
 from app.models.reward import RewardTransaction
@@ -11,6 +11,8 @@ __all__ = [
     "User",
     "CivicIssue",
     "IssueVote",
+    "ImpactReaction",
+    "ImpactShare",
     "IssueComment",
     "IssueEvidence",
     "IssueTimelineEvent",

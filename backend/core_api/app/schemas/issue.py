@@ -56,6 +56,16 @@ class IssueCreate(BaseModel):
 class IssueStatusUpdate(BaseModel):
     status: Status
     note: str | None = Field(default=None, max_length=500)
+    # Only used when status == "Resolved": URLs from POST /api/uploads, shown as the "after" photo in Impact Reels.
+    after_image_urls: list[str] = Field(default_factory=list, max_length=3)
+
+    @field_validator("after_image_urls")
+    @classmethod
+    def _only_own_uploads(cls, v: list[str]) -> list[str]:
+        for url in v:
+            if not url.startswith("/uploads/") or ".." in url:
+                raise ValueError("after_image_urls must be URLs returned by /api/uploads")
+        return v
 
 
 class CommentCreate(BaseModel):

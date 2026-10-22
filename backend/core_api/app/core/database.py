@@ -74,7 +74,12 @@ def _add_missing_columns() -> None:
 
     wanted = {
         "issue_evidence": [("image_hash", "VARCHAR(16)")],
-        "civic_issues": [("deleted_at", "DATETIME")],
+        "civic_issues": [
+            ("deleted_at", "DATETIME"),
+            ("resolution_image_urls", "TEXT NOT NULL DEFAULT '[]'"),
+            ("resolution_note", "VARCHAR(500)"),
+            ("resolved_at", "DATETIME"),
+        ],
     }
     inspector = inspect(engine)
     with engine.begin() as conn:

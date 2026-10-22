@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { CivicCategory, CivicPost, ReelStory } from '../types';
+import { getReels } from '../lib/reelsApi';
+import { reelFallbackImage, toReel } from '../lib/mappers';
 
 interface CivicVideo {
   id: string;
@@ -129,7 +131,13 @@ interface ExploreGridItem {
 
 export const SearchScreen: React.FC = () => {
   const navigate = useNavigate();
-  const { posts, reels, setSelectedPostForDetail, addToast } = useApp();
+  const { posts, setSelectedPostForDetail, addToast } = useApp();
+  const [reels, setReels] = useState<ReelStory[]>([]);
+  useEffect(() => {
+    getReels(1, false, 30)
+      .then((r) => setReels(r.items.map(toReel)))
+      .catch(() => setReels([]));
+  }, []);
 
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'All' | 'Reels' | 'Photos' | 'Videos' | 'Issues' | 'Resolved'>('All');
@@ -190,7 +198,7 @@ export const SearchScreen: React.FC = () => {
       items.push({
         id: `reel-${reel.id}`,
         type: 'reel',
-        thumbnail: reel.mediaUrl,
+        thumbnail: reel.afterImage || reel.beforeImage || reelFallbackImage(reel.category),
         title: reel.title,
         upvotes: reel.likes,
         commentsCount: reel.commentsCount,
@@ -258,7 +266,7 @@ export const SearchScreen: React.FC = () => {
 
   const handleTileClick = (item: ExploreGridItem) => {
     if (item.type === 'reel') {
-      navigate('/positive-impact');
+      navigate(item.reelRef ? `/positive-impact?story=${item.reelRef.id}` : '/positive-impact');
     } else if (item.type === 'video' && item.videoRef) {
       setSelectedVideo(item.videoRef);
     } else if (item.postRef) {

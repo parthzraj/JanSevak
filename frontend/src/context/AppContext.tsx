@@ -2,7 +2,6 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import {
   CivicPost,
   DailyBriefing,
-  ReelStory,
   UserNotification,
   Badge,
   UserProfile,
@@ -14,7 +13,6 @@ import {
   INITIAL_USER,
   INITIAL_BRIEFING,
   INITIAL_POSTS,
-  INITIAL_REELS,
   INITIAL_NOTIFICATIONS,
   INITIAL_BADGES,
 } from '../mockData/initialData';
@@ -37,13 +35,13 @@ import {
   registerRequest,
   removeUpvote,
   setToken,
-  updateIssueStatus,
   updateMe,
   uploadEvidence,
   uploadImageDataUrl,
   upvoteIssue,
   type BackendTokenResponse,
 } from '../lib/api';
+import { resolveIssue } from '../lib/reelsApi';
 import { avatarFrom, nextLevelPoints, toCivicPost, toComment, toNotification, toSupporter, toUserProfile } from '../lib/mappers';
 
 interface AppContextType {
@@ -79,10 +77,6 @@ interface AppContextType {
   toggleBookmark: (postId: string) => void;
   voteInPoll: (postId: string, optionId: string) => void;
   briefing: DailyBriefing;
-  reels: ReelStory[];
-  toggleReelLike: (reelId: string) => void;
-  toggleReelSave: (reelId: string) => void;
-  addReelComment: (reelId: string, text: string) => void;
   notifications: UserNotification[];
   unreadNotificationsCount: number;
   markAllNotificationsAsRead: () => void;
@@ -120,7 +114,7 @@ interface AppContextType {
   isSidebarOpen: boolean;
   setIsSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
-  resolveReport: (postId: string) => void;
+  resolveReport: (postId: string, opts?: { afterPhoto?: string; note?: string }) => Promise<boolean>;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   toggleTheme: () => void;
@@ -246,16 +240,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const isBriefingAvailable = currentTime.getHours() >= 7;
 
-  // Reels (safe parse)
-  const [reels, setReels] = useState<ReelStory[]>(() => {
-    try {
-      const saved = localStorage.getItem('prajapulse_reels');
-      return saved ? JSON.parse(saved) : INITIAL_REELS;
-    } catch {
-      return INITIAL_REELS;
-    }
-  });
-
   // Notifications (safe parse)
   const [notifications, setNotifications] = useState<UserNotification[]>(() => {
     try {
@@ -310,10 +294,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('prajapulse_posts', JSON.stringify(posts));
   }, [posts]);
-
-  useEffect(() => {
-    localStorage.setItem('prajapulse_reels', JSON.stringify(reels));
-  }, [reels]);
 
   useEffect(() => {
     localStorage.setItem('prajapulse_notifications', JSON.stringify(notifications));
@@ -607,13 +587,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const resolveReport = async (postId: string) => {
+  const resolveReport = async (postId: string, opts?: { afterPhoto?: string; note?: string }) => {
     try {
-      await updateIssueStatus(postId, 'Resolved');
+      const afterUrls = opts?.afterPhoto ? [await uploadImageDataUrl(opts.afterPhoto)] : [];
+      await resolveIssue(postId, opts?.note?.trim() || undefined, afterUrls);
       await Promise.all([refreshPosts(), refreshUser()]);
-      addToast('Issue Marked Resolved', 'The reporter has been credited with the resolution reward.', 'reward');
+      addToast(
+        'Issue Marked Resolved',
+        afterUrls.length
+          ? 'It now appears in Impact Reels with its before and after photos.'
+          : 'It now appears in Impact Reels. The reporter has been credited.',
+        'reward'
+      );
+      return true;
     } catch (e) {
       addToast('Could not resolve issue', errText(e), 'info');
+      return false;
     }
   };
 
@@ -748,62 +737,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const toggleReelLike = (reelId: string) => {
-    setReels((prev) =>
-      prev.map((reel) => {
-        if (reel.id === reelId) {
-          const hasLiked = !reel.hasLiked;
-          const likes = hasLiked ? reel.likes + 1 : Math.max(0, reel.likes - 1);
-          if (hasLiked) {
-            addToast('Impact Celebrated!', 'Inspired by community transformation.', 'success');
-          }
-          return { ...reel, hasLiked, likes };
-        }
-        return reel;
-      })
-    );
-  };
-
-  const toggleReelSave = (reelId: string) => {
-    setReels((prev) =>
-      prev.map((reel) => {
-        if (reel.id === reelId) {
-          const isSaved = !reel.isSaved;
-          addToast(
-            isSaved ? 'Impact Story Saved' : 'Story Removed',
-            isSaved ? 'Find this in your saved community stories.' : undefined,
-            'info'
-          );
-          return { ...reel, isSaved };
-        }
-        return reel;
-      })
-    );
-  };
-
-  const addReelComment = (reelId: string, text: string) => {
-    if (!text.trim()) return;
-    const newComment = {
-      id: 'rc-' + Date.now(),
-      author: user.name,
-      text: text.trim(),
-      time: 'Just now',
-    };
-    setReels((prev) =>
-      prev.map((reel) => {
-        if (reel.id === reelId) {
-          return {
-            ...reel,
-            commentsCount: reel.commentsCount + 1,
-            comments: [...reel.comments, newComment],
-          };
-        }
-        return reel;
-      })
-    );
-    addToast('Comment Added', undefined, 'info');
-  };
-
   const markAllNotificationsAsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
     markAllNotificationsRead().catch(() => undefined);
@@ -837,10 +770,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleBookmark,
         voteInPoll,
         briefing,
-        reels,
-        toggleReelLike,
-        toggleReelSave,
-        addReelComment,
         notifications,
         unreadNotificationsCount,
         markAllNotificationsAsRead,

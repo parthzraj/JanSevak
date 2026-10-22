@@ -1,5 +1,13 @@
 /** Converts Core API (snake_case) objects into the shapes the UI already uses. */
-import type { CivicCategory, CivicPost, IssuePriority, IssueStatus, UserNotification, UserProfile } from '../types';
+import type {
+  CivicCategory,
+  CivicPost,
+  IssuePriority,
+  IssueStatus,
+  ReelStory,
+  UserNotification,
+  UserProfile,
+} from '../types';
 import {
   assetUrl,
   type BackendComment,
@@ -8,6 +16,7 @@ import {
   type BackendSupporter,
   type BackendUser,
 } from './api';
+import type { BackendReel } from './reelsApi';
 
 /** "preset:man-1" stays as is (drawn by <Avatar>), uploads become full URLs, nothing -> '' (coloured initials). */
 export const avatarFrom = (url: string | null | undefined): string =>
@@ -186,3 +195,34 @@ export function toSupporter(s: BackendSupporter) {
     time: timeAgo(s.supported_at),
   };
 }
+
+export function toReel(r: BackendReel): ReelStory {
+  const category = (r.category in CATEGORY_VISUALS ? r.category : 'Community') as CivicCategory;
+  return {
+    id: String(r.id),
+    title: r.title,
+    caption: r.description,
+    category,
+    locality: r.locality || r.creator.ward || 'Bengaluru',
+    creator: {
+      id: String(r.creator.id),
+      name: r.creator.name,
+      avatar: avatarFrom(r.creator.avatar_url),
+      ward: r.creator.ward || '',
+    },
+    beforeImage: r.before_image ? assetUrl(r.before_image) : null,
+    afterImage: r.after_image ? assetUrl(r.after_image) : null,
+    resolutionNote: r.resolution_note,
+    resolvedAt: r.resolved_at,
+    daysToResolve: r.days_to_resolve,
+    supporters: r.supporters,
+    likes: r.likes,
+    commentsCount: r.comments_count,
+    shares: r.shares,
+    hasLiked: r.has_liked,
+    isSaved: r.is_saved,
+  };
+}
+
+/** The photo to show when a reel has no uploaded images: the category illustration. */
+export const reelFallbackImage = (category: CivicCategory): string => CATEGORY_VISUALS[category].url;
