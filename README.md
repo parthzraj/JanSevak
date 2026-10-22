@@ -1,58 +1,175 @@
-# Jansevak — AI-Powered Civic Engagement Platform
+# JanSevak
 
-**Making communities better through technology, collaboration, and accountability.**
+**AI-powered civic engagement for reporting, prioritizing, and resolving local issues.**
 
-Jansevak is an AI-powered civic engagement platform that connects citizens, NGOs, and government authorities to identify, report, prioritize, and resolve local civic issues. It transforms traditional complaint reporting into a collaborative ecosystem focused on community participation, transparent governance, and measurable impact.
+JanSevak connects citizens, NGOs, and government authorities in one civic platform. Citizens
+can report local problems, add evidence, support community reports, follow resolution progress,
+and participate in community initiatives. AI services help turn reports into useful civic
+intelligence without replacing official review or community accountability.
 
-## Key Features
+## Highlights
 
-- **Smart Issue Reporting:** Report civic problems with images, location details, and AI-assisted analysis.
-- **Community Engagement:** Validate reports, upvote issues, and collaborate with local residents.
-- **AI Chatbot Assistant:** Get guidance on reporting issues and finding appropriate solutions.
-- **Rewards & Gamification:** Earn points, badges, and recognition for meaningful civic contributions.
-- **NGO Collaboration:** Connect with verified organizations, volunteers, and community initiatives.
-- **Government Accountability:** Track issue status, response timelines, and resolution progress.
-- **Interactive Feed & Maps:** Discover nearby civic issues and identify local problem hotspots.
-- **Predictive Analytics:** Identify recurring problems and support preventive action.
-- **Impact Tracking:** Monitor resolved issues, community contributions, and before-and-after improvements.
-- **Root Cause Analysis:** Connect related civic problems to identify underlying causes.
+- **Civic issue reporting** with photos, location details, status tracking, and resolution history.
+- **AI-assisted reporting** for complaint generation, problem descriptions, image analysis,
+  hazard alerts, and suggestive remarks.
+- **AI-prioritized feed and daily briefing** with the top three urgent civic issues from the
+  active feed plus briefing updates and impact information returned by the AI/data flow.
+- **Per-user 7:00 AM briefing lifecycle**: the briefing becomes available after 7:00 AM local
+  time every day. Acknowledgment is stored independently for each signed-in user and calendar
+  day, so one citizen's acknowledgment never dismisses another citizen's briefing.
+- **Community participation** through upvotes, comments, evidence, maps, and issue sharing.
+- **Rewards and gamification** with points, badges, quizzes, learning modules, and certificates.
+- **NGO and volunteer collaboration** for drives, initiatives, and community action.
+- **Predictive civic alerts** for recurring hazards and prevention planning.
+- **Official accountability** through issue status updates, response timelines, and analytics.
 
-## How It Works
+## Architecture
 
-1. **Report:** Citizens submit civic issues with photos and location information.
-2. **Analyze:** AI helps classify issues, assess severity, and suggest possible actions.
-3. **Validate:** Community members review and support reported problems.
-4. **Collaborate:** Citizens and NGOs coordinate community-led solutions.
-5. **Escalate:** Government authorities are notified of issues requiring official intervention.
-6. **Track:** Users monitor progress, resolution status, and accountability.
-7. **Recognize:** Contributors earn rewards and communities celebrate measurable improvements.
+| Service | Location | Default port | Responsibility |
+| --- | --- | ---: | --- |
+| Frontend | `frontend/` | `3000` | React, TypeScript, Vite, Tailwind CSS, and the citizen experience |
+| Core API | `backend/core_api/` | `8000` | Authentication, users, civic issues, votes, comments, rewards, notifications, uploads, and AI proxy |
+| AI service | `backend/ai_service/` | `8001` | Ollama-backed civic chatbot, report assistance, image analysis, hazard analysis, and feed prioritization |
+| Lite AI service | `backend/lite/` | `8001` | Zero-GPU fallback used when Ollama is unavailable |
 
-## Who Is It For?
+The Core API stores application data in SQLite. The frontend calls the Core API, and the Core
+API proxies AI requests to the AI service.
 
-- **Citizens:** Report issues, participate in solutions, and track local improvements.
-- **NGOs:** Discover initiatives, coordinate volunteers, and support communities.
-- **Government Authorities:** Prioritize civic issues, monitor progress, and improve transparency.
+## Quick start on Windows
 
-## Vision
+### Prerequisites
 
-Our vision is to build cleaner, safer, and more accountable communities by making civic participation accessible, collaborative, and rewarding.
+- Node.js and npm
+- Python 3.10 or newer
+- PowerShell
+- Ollama is optional. Install it and pull the configured models to use the full local AI service;
+  otherwise the launcher starts the lite fallback.
 
-Jansevak aims to move beyond simply reporting problems toward preventing their recurrence and creating lasting civic impact.
+### One-click startup
 
-## Project Status
+From the repository root:
 
-Jansevak is a civic technology project focused on developing an integrated platform for issue reporting, AI-assisted analysis, community collaboration, and public accountability.
+```powershell
+.\run.bat
+```
 
-*Note: Features such as predictive analytics, automated government integrations, and reward redemption depend on implementation and available data.*
+The launcher starts:
+
+- Frontend: <http://localhost:3000>
+- Core API: <http://localhost:8000>
+- AI service or lite fallback: <http://localhost:8001>
+
+It also opens the frontend in the browser. Press **Enter** in the launcher window to stop the
+services.
+
+### Manual frontend setup
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Useful frontend commands:
+
+```powershell
+npm run lint
+npm run build
+```
+
+### Manual Core API setup
+
+```powershell
+cd backend\core_api
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env
+python seed_data.py
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Core API documentation is available at <http://localhost:8000/docs>.
+
+### Full AI service setup (optional)
+
+Install Ollama and pull the configured models:
+
+```powershell
+ollama pull llama3.2:3b
+ollama pull llava
+```
+
+Then run the AI service:
+
+```powershell
+cd backend\ai_service
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+```
+
+The AI service documentation is available at <http://localhost:8001/docs>. See
+[backend/ai_service/README.md](./backend/ai_service/README.md) for model and endpoint details.
+
+## Demo accounts
+
+After running `python seed_data.py` in `backend/core_api/`, use password `demo123`:
+
+| Email | Account |
+| --- | --- |
+| `ayush@example.com` | Citizen |
+| `priya@example.com` | Citizen |
+| `rahul@example.com` | Citizen |
+| `official@example.com` | Municipal official |
+
+Each account has its own briefing acknowledgment state. To verify this behavior, acknowledge
+the briefing with one account, log out, and sign in with another account on the same browser.
+The second account will still receive its own daily briefing.
+
+## Testing
+
+Frontend type-check and production build:
+
+```powershell
+cd frontend
+npm run lint
+npm run build
+```
+
+Core API tests:
+
+```powershell
+cd backend\core_api
+python -m pytest -q
+```
+
+## Project documentation
+
+- [Frontend documentation](./frontend/README.md)
+- [Core API documentation](./backend/core_api/README.md)
+- [AI service documentation](./backend/ai_service/README.md)
+- [API contract](./backend/CONTRACT.md)
+- [Backend roles](./backend/roles.md)
+
+## Project status
+
+JanSevak is an active civic technology project. Core reporting, authentication, community
+engagement, AI assistance, rewards, notifications, and briefing flows are implemented. Some
+integrations and predictive capabilities depend on the configured data, local services, and
+available AI models.
 
 ## Contributing
 
-Contributions, suggestions, and feedback are welcome. Help us explore better ways to use technology to solve real-world civic challenges.
+Contributions, suggestions, and feedback are welcome. Please keep changes focused, preserve the
+existing service boundaries, and update the relevant documentation when behavior or setup changes.
 
 ## License
 
-A license has not yet been specified. Please check the repository for licensing information before reusing or distributing the code.
+A license has not yet been specified. Check the repository for licensing information before
+reusing or distributing the code.
 
 ---
 
-**Jansevak — Your community. Your voice. Your impact.**
+**Jansevak - Your community. Your voice. Your impact.**
